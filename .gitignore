@@ -1,0 +1,41 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+
+# iOS/macOS
+ios/.generated/
+ios/.symlinks/
+ios/Pods/
+ios/Runner.xcworkspace/
+macos/.generated/
+macos/.symlinks/
+macos/Pods/
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcuserstate
+
+# Android
+android/key.properties
+android/local.properties
+android/app/src/main/res/drawable-*/
+android/app/src/main/res/mipmap-*/
+*.keystore
+
+# C++/CMake/JUCE
+native/engine/build/
+native/engine/vendor/
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+.DS_Store
+
+# Agent
+.agent/scratch/

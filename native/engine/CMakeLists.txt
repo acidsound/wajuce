@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 
 project(WajuceEngine VERSION 0.1.0 LANGUAGES C CXX)
 
-# JUCE — use vendor copy (shared with acidBros_flutter)
+# JUCE — use vendor copy
 add_subdirectory(vendor/JUCE ${CMAKE_CURRENT_BINARY_DIR}/JUCE EXCLUDE_FROM_ALL)
 
 # Engine static library

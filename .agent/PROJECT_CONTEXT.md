@@ -22,11 +22,11 @@ Flutter plugin providing Web Audio API 1.1-compatible interfaces.
 | **4** | Buffer/I/O: `decodeAudioData()` native impl, BufferSource data transfer, MediaStream (mic/recording) |
 | **5** partial | MIDI C++ native impl (JUCE MidiInput/MidiOutput bridge in WajuceEngine.cpp) |
 | **6** | Web backend: `backend_web.dart` has stubs only — needs actual `dart:js_interop` calls |
-| **7** | Integration examples: acidBros TB303, ddxx7 DX7, uss44 VoiceProcessor porting |
+| **7** | Integration examples: Porting various Web Audio engines |
 
 ### ⚠️ NOT YET BUILD-TESTED
 - Native build (`flutter build macos/ios/android`) has NOT been tested
-- JUCE vendor symlink comes from `acidBros_flutter/native/juce_engine/vendor/JUCE`
+- **JUCE Framework**: Must be placed in `native/engine/vendor/JUCE`. (Note: Previous symlink to `acidBros_flutter` is broken if that project was deleted)
 
 ## File Inventory
 
@@ -79,10 +79,12 @@ native/engine/Source/ParamAutomation.h # Param scheduling timeline
 - **AudioProcessorGraph** for node routing (matches Web Audio spec)
 - **Dart Isolate** for AudioWorklet (keeps processor code in Dart)
 - **3-backend conditional import**: `dart.library.ffi` → JUCE, `dart.library.js_interop` → Web Audio, fallback → stub
-- **JUCE vendor symlink** from `acidBros_flutter` to share framework
+- **JUCE Framework**: Independent vendor setup in `native/engine/vendor/JUCE`
 - **WAJUCE_STUB_ONLY** CMake for building without JUCE
 - **Automatic Cyclic Connections (FeedbackBridge)**: Detects cycles during `connect()` and automatically inserts a `FeedbackSender`/`FeedbackReceiver` pair with a shared buffer (1-block delay) to allow feedback loops without violating JUCE's GraphQL DAG constraints.
 
 ## Reference Documents
-- Architecture spec: `.agent/wajuce_architect.md`
-- Implementation plan: see conversation artifacts
+> [!IMPORTANT]
+> To understand the deep technical details and roadmap of this project, ALWAYS read the following documents first:
+- **Architecture Specification**: `.agent/wajuce_architect.md`
+- **Implementation Plan**: `.agent/implementation_plan.md`

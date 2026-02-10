@@ -1,92 +1,118 @@
 # wajuce
 
-A new Flutter FFI plugin project.
+**JUCE-powered Web Audio API for Flutter.**
 
-## Getting Started
+`wajuce` provides a Web Audio API 1.1 compatible interface for Flutter and Dart. It allows developers to use familiar Web Audio patterns while delivering high-performance, low-latency audio processing via a native JUCE C++ backend.
 
-This project is a starting point for a Flutter
-[FFI plugin](https://flutter.dev/to/ffi-package),
-a specialized package that includes native code directly invoked with Dart FFI.
+---
 
-## Project structure
+## 🌟 Key Features
 
-This template uses the following structure:
+- **Web Audio API Parity**: Mirrors `AudioContext`, `OscillatorNode`, `GainNode`, etc., making it easy to port existing JS audio engines.
+- **JUCE Backend**: Leverages the industry-standard JUCE framework for native audio processing on iOS, Android, macOS, and Windows.
+- **Pure Web Support**: Automatically falls back to the browser's native Web Audio API on Web platforms via `dart:js_interop`.
+- **Zero-Overhead FFI**: Uses Dart FFI for fast communication between Dart and C++ without MethodChannel overhead.
+- **AudioWorklet Support**: Emulates the AudioWorklet system using high-priority Dart Isolates.
+- **Feedback Loops**: Built-in `FeedbackBridge` automatically handles cyclic connections in the node graph (1-block delay).
 
-* `src`: Contains the native source code, and a CmakeFile.txt file for building
-  that source code into a dynamic library.
+---
 
-* `lib`: Contains the Dart code that defines the API of the plugin, and which
-  calls into the native code using `dart:ffi`.
+## 🏗️ Architecture
 
-* platform folders (`android`, `ios`, `windows`, etc.): Contains the build files
-  for building and bundling the native code library with the platform application.
+`wajuce` is built on a multi-backend architecture that ensures code portability across all platforms:
 
-## Building and bundling native code
+```mermaid
+graph TD
+    subgraph "Dart API Layer"
+        A[WAContext] --> B[WANode Graph]
+    end
 
-The `pubspec.yaml` specifies FFI plugins as follows:
+    subgraph "Platform Backends"
+        B -->|Native| C[backend_juce.dart]
+        B -->|Web| D[backend_web.dart]
+    end
 
-```yaml
-  plugin:
-    platforms:
-      some_platform:
-        ffiPlugin: true
+    subgraph "Native Layer (C++/JUCE)"
+        C --> E[FFI Bridge]
+        E --> F[WajuceEngine]
+        F --> G[JUCE AudioProcessorGraph]
+    end
+
+    subgraph "Web Layer (JS)"
+        D --> H[Browser Web Audio API]
+    end
 ```
 
-This configuration invokes the native build for the various target platforms
-and bundles the binaries in Flutter applications using these FFI plugins.
+---
 
-This can be combined with dartPluginClass, such as when FFI is used for the
-implementation of one platform in a federated plugin:
+## 🚀 Current Implementation Status (2026-02-11)
 
-```yaml
-  plugin:
-    implements: some_other_plugin
-    platforms:
-      some_platform:
-        dartPluginClass: SomeClass
-        ffiPlugin: true
+| Feature Group | Status | Component Coverage |
+| :--- | :---: | :--- |
+| **Context & Graph** | ✅ Done | `WAContext`, `WAOfflineContext`, `connect/disconnect` |
+| **Core Nodes** | ✅ Done | `Oscillator`, `Gain`, `BiquadFilter`, `Compressor`, `Delay`, `Analyser`, `StereoPanner`, `WaveShaper`, `BufferSource` |
+| **AudioParam** | ✅ Done | Full automation (12 methods including `exponentialRampToValueAtTime`) |
+| **MIDI API** | ⚠️ Partial | Dart API done; Native JUCE implementation pending |
+| **AudioWorklet** | ⚠️ Partial | Isolate system done; High-performance Native sync pending |
+| **Web Backend** | ✅ Done | Native passthrough via `js_interop` |
+| **Build System** | ⚠️ Testing | Dual-mode CMake (JUCE/Stub) ready; Native builds in progress |
+
+---
+
+## 💻 Usage Example
+
+The API is designed to be almost identical to the standard Web Audio API:
+
+```dart
+// 1. Initialize context
+final ctx = WAContext();
+await ctx.resume();
+
+// 2. Create nodes
+final osc = ctx.createOscillator();
+final filter = ctx.createBiquadFilter();
+final gain = ctx.createGain();
+
+// 3. Configure and Automate
+osc.type = WAOscillatorType.sawtooth;
+filter.frequency.setValueAtTime(440, ctx.currentTime);
+filter.frequency.exponentialRampToValueAtTime(2000, ctx.currentTime + 2.0);
+
+// 4. Connect graph
+osc.connect(filter);
+filter.connect(gain);
+gain.connect(ctx.destination);
+
+// 5. Start
+osc.start();
 ```
 
-A plugin can have both FFI and method channels:
+---
 
-```yaml
-  plugin:
-    platforms:
-      some_platform:
-        pluginClass: SomeName
-        ffiPlugin: true
-```
+## 🛠️ Project Structure
 
-The native build systems that are invoked by FFI (and method channel) plugins are:
+- `lib/src/`: Dart API implementation and backend switching logic.
+- `lib/src/backend/`: Platform-specific implementation (FFI vs JS).
+- `native/engine/`: The JUCE-based C++ audio engine.
+- `src/`: C-API headers and stubs for FFI binding.
 
-* For Android: Gradle, which invokes the Android NDK for native builds.
-  * See the documentation in android/build.gradle.
-* For iOS and MacOS: Xcode, via CocoaPods.
-  * See the documentation in ios/wajuce.podspec.
-  * See the documentation in macos/wajuce.podspec.
-* For Linux and Windows: CMake.
-  * See the documentation in linux/CMakeLists.txt.
-  * See the documentation in windows/CMakeLists.txt.
+---
 
-## Binding to native code
+---
 
-To use the native code, bindings in Dart are needed.
-To avoid writing these by hand, they are generated from the header file
-(`src/wajuce.h`) by `package:ffigen`.
-Regenerate the bindings by running `dart run ffigen --config ffigen.yaml`.
+## 🤖 AI Skills & Automation
 
-## Invoking native code
+This project includes specialized **AI Skills** to help agents maintain the development environment.
 
-Very short-running native functions can be directly invoked from any isolate.
-For example, see `sum` in `lib/wajuce.dart`.
+- **JUCE Management (`juce_setup`)**: Automated detection and setup of the JUCE framework.
+  - Located at: `.agent/skills/juce_management/SKILL.md`
+  - Purpose: Fixes broken dependencies, handles symlinks, and configures submodules.
 
-Longer-running functions should be invoked on a helper isolate to avoid
-dropping frames in Flutter applications.
-For example, see `sumAsync` in `lib/wajuce.dart`.
+To use these skills, simply ask your AI agent: *"Help me set up the JUCE environment using the available skills."*
 
-## Flutter help
+---
 
-For help getting started with Flutter, view our
-[online documentation](https://docs.flutter.dev), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
 

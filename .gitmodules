@@ -1,0 +1,3 @@
+[submodule "native/engine/vendor/JUCE"]
+	path = native/engine/vendor/JUCE
+	url = https://github.com/juce-framework/JUCE.git

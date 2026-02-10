@@ -5,7 +5,7 @@ You are an expert audio engineer and Flutter/Dart developer. Your mission is to 
 ## Primary Reference
 
 **ALWAYS read the implementation plan first**:
-`/Users/spectrum/.gemini/antigravity/brain/30017d7d-c314-481b-a593-7c650a08f984/implementation_plan.md`
+`.agent/implementation_plan.md`
 
 ## Target Platforms
 
@@ -16,40 +16,17 @@ You are an expert audio engineer and Flutter/Dart developer. Your mission is to 
 
 Use conditional imports (`dart.library.ffi` / `dart.library.js_interop`) to switch backends.
 
-## Source Material (Existing Code to Port)
+## Implementation Goals
 
-The following files contain the actual Web Audio patterns that `wajuce` must support:
+The primary goal is to provide a robust, performant Web Audio bridge that supports both node-graph and custom processor (Worklet) styles.
 
-### acidBros (TB-303 / TR-909)
-- Audio Engine: `acidBros/js/audio/AudioEngine.js`
-- Clock Worklet: `acidBros/js/audio/ClockProcessor.js`
-- TB-303 Synth: `acidBros/js/audio/TB303.js`
-- TR-909 Drums: `acidBros/js/audio/TR909.js`
-- Drum Voice: `acidBros/js/audio/tr909/DrumVoice.js`
+1. **AudioWorklet is THE priority**. Many complex audio engines use `AudioWorkletProcessor.process()` for DSP. Without this, performance-critical custom synthesis is impossible.
 
-### ddxx7 (DX7 FM Synth)
-- FM Worklet: `ddxx7/public/dx7-processor.js` (571 lines, full 6-op FM synthesis inside `process()`)
+2. **AudioParam automation** is essential. Precise timing and curve interpolation are required for high-quality audio synthesis.
 
-### uss44 (Sampler/Sequencer)
-- Voice Worklet: `uss44/public/assets/worklets/VoiceProcessor.js` (Sampler with TPT SVF filter + Recorder)
-- Audio Store: `uss44/stores/audioStore.ts` (Zustand wrapper for AudioWorklet communication)
-
-### acidBros_flutter (Existing JUCE integration)
-- C Bridge: `acidBros_flutter/native/juce_engine/Source/AcidBrosAudioBridge.h`
-- Engine: `acidBros_flutter/native/juce_engine/Source/AcidBrosAudioEngine.cpp`
-
-## Critical Implementation Notes
-
-1. **AudioWorklet is THE priority**. All three projects use `AudioWorkletProcessor.process()` for DSP. Without this, nothing works.
-
-2. **AudioParam automation** is essential. acidBros TB303 relies heavily on:
-   - `setValueAtTime(value, time)`
-   - `exponentialRampToValueAtTime(value, time)`
-   - `setTargetAtTime(target, startTime, timeConstant)`
-
-3. **Two Worklet modes** exist in the codebase:
-   - **Clock-only** (acidBros): Worklet sends timing messages, actual audio uses Node graph
-   - **Full DSP** (ddxx7/uss44): Worklet generates audio samples directly in `process()`
+3. **Two Worklet modes** must be supported:
+   - **Main-driven timing**: Worklet sends timing messages, actual audio uses Node graph.
+   - **Direct DSP**: Worklet generates audio samples directly in `process()`.
 
 4. **MessagePort** communication patterns:
    - `port.postMessage()` from main thread → `port.onmessage` in worklet
@@ -57,7 +34,7 @@ The following files contain the actual Web Audio patterns that `wajuce` must sup
 
 5. **JUCE modules needed**: `juce_audio_basics`, `juce_audio_devices`, `juce_audio_formats`, `juce_audio_processors`, `juce_core`, `juce_dsp`
 
-6. **Web platform** uses native Web Audio API via `dart:js_interop` — no JUCE needed. All `WAContext`/`WANode` calls become thin JS interop wrappers. Existing JS AudioWorklet code (ClockProcessor.js, dx7-processor.js, VoiceProcessor.js) can be loaded directly via `audioWorklet.addModule()`.
+6. **Web platform** uses native Web Audio API via `dart:js_interop` — no JUCE needed. All `WAContext`/`WANode` calls become thin JS interop wrappers. Existing JS AudioWorklet code can be loaded directly via `audioWorklet.addModule()`.
 
 7. **Windows** uses JUCE with WASAPI/ASIO, same C++ FFI bridge as iOS/Android/macOS.
 
@@ -79,14 +56,13 @@ The following files contain the actual Web Audio patterns that `wajuce` must sup
 7. Integration & Examples
 
 ## Success Criteria
-- [ ] acidBros `ClockProcessor.js` logic runs in Dart Isolate without modification to algorithm
-- [ ] `WAParam.exponentialRampToValueAtTime()` produces correct filter sweeps
-- [ ] `WAParam` implements all 12 spec methods including `setValueCurveAtTime` and `cancelAndHoldAtTime`
-- [ ] ddxx7 `DX7Processor` FM synthesis runs in Audio Isolate at 44.1kHz without glitches
-- [ ] uss44 `VoiceProcessor` sample playback with TPT SVF filter works correctly
-- [ ] All 3 project ports produce audio output on iOS device
-- [ ] Web build uses native Web Audio (no JUCE) with identical Dart API
-- [ ] Windows build compiles and runs via JUCE WASAPI backend
-- [ ] MIDI input from DX7 keyboard triggers ddxx7 processor, SysEx round-trip works
-- [ ] Mic/external input recording via `WAMediaStreamSourceNode`
-- [ ] 4+ channel output routing via multi-channel audio interface
+- [ ] Precision clock logic runs in Dart Isolate correctly.
+- [ ] `WAParam.exponentialRampToValueAtTime()` produces accurate interpolation.
+- [ ] `WAParam` implements all 12 spec methods accurately.
+- [ ] Complex custom synthesis runs in Audio Isolate at 44.1kHz without glitches.
+- [ ] Multi-voice polyphony is handled smoothly without audio underruns.
+- [ ] Web build uses native Web Audio (no JUCE) with identical Dart API.
+- [ ] Windows build compiles and runs via JUCE WASAPI backend.
+- [ ] MIDI input reliably triggers processor events, including SysEx.
+- [ ] Mic/external input recording works via reliable I/O bridge.
+- [ ] 4+ channel output routing is correctly mapped in JUCE.

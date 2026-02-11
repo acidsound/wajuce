@@ -1,3 +1,4 @@
+// ignore_for_file: public_member_api_docs
 /// Audio Isolate — runs AudioWorklet processors in a separate Dart isolate.
 ///
 /// This isolate handles:

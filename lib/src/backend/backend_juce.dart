@@ -1,3 +1,4 @@
+// ignore_for_file: public_member_api_docs
 /// JUCE FFI Backend — native platform implementation.
 ///
 /// Loads the compiled wajuce shared library and resolves C-API symbols
@@ -295,9 +296,9 @@ void _freeCString(ffi.Pointer<ffi.Char> ptr) {
 // ---------------------------------------------------------------------------
 
 int contextCreate(int sampleRate, int bufferSize) {
-  print('[wajuce] Dart: contextCreate sr=$sampleRate, bs=$bufferSize');
+  // print('[wajuce] Dart: contextCreate sr=$sampleRate, bs=$bufferSize');
   final id = _contextCreate(sampleRate, bufferSize);
-  print('[wajuce] Dart: contextCreated, native id=$id');
+  // print('[wajuce] Dart: contextCreated, native id=$id');
   return id;
 }
 
@@ -514,7 +515,7 @@ Future<WABuffer> decodeAudioData(int ctxId, Uint8List data) async {
   }
 
   // Assume raw float32 mono PCM for stub. Real impl would call native.
-  final sampleRate = 44100;
+  const sampleRate = 44100;
   final floatData = data.buffer.asFloat32List();
   final buffer = WABuffer(
     numberOfChannels: 1,

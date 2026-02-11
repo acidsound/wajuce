@@ -41,7 +41,6 @@ class WAContext {
   }
 
   /// Internal constructor for subclasses (OfflineAudioContext).
-  /// @nodoc
   WAContext.fromId(this._ctxId) {
     _worklet = WAWorklet(contextId: _ctxId);
     final destId = backend.contextGetDestinationId(_ctxId);

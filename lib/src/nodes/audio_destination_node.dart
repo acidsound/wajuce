@@ -5,6 +5,7 @@ import 'audio_node.dart';
 class WADestinationNode extends WANode {
   final int _maxChannelCount;
 
+  /// Creates a new DestinationNode.
   WADestinationNode({
     required super.nodeId,
     required super.contextId,

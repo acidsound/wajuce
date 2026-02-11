@@ -3,15 +3,21 @@ import '../audio_param.dart';
 
 /// A dynamics compressor node. Mirrors Web Audio API DynamicsCompressorNode.
 class WADynamicsCompressorNode extends WANode {
+  /// The threshold in dB above which compression starts.
   late final WAParam threshold;
+  /// The range in dB over which the compression transitions smoothly.
   late final WAParam knee;
+  /// The ratio of input change to output change.
   late final WAParam ratio;
+  /// The time in seconds to reduce gain.
   late final WAParam attack;
+  /// The time in seconds to release gain.
   late final WAParam release;
 
   // reduction is read-only, obtained from backend
   final double _reduction = 0.0;
 
+  /// Creates a new DynamicsCompressorNode.
   WADynamicsCompressorNode({
     required super.nodeId,
     required super.contextId,

@@ -1,4 +1,8 @@
 include: package:flutter_lints/flutter.yaml
 
-# Additional information about this file can be found at
-# https://dart.dev/guides/language/analysis-options
+linter:
+  rules:
+    - public_member_api_docs
+    - prefer_relative_imports
+    - always_declare_return_types
+    - prefer_final_locals

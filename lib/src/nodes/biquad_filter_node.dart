@@ -8,12 +8,17 @@ import '../backend/backend.dart' as backend;
 /// A second-order IIR filter node.
 /// Mirrors Web Audio API BiquadFilterNode.
 class WABiquadFilterNode extends WANode {
+  /// The frequency of the filter in Hertz.
   late final WAParam frequency;
+  /// The detuning value in cents.
   late final WAParam detune;
+  /// The quality factor (resonance) of the filter.
   late final WAParam Q;
+  /// The gain (boost/cut) in decibels, used for shelf/peaking filters.
   late final WAParam gain;
   WABiquadFilterType _type = WABiquadFilterType.lowpass;
 
+  /// Creates a new BiquadFilterNode.
   WABiquadFilterNode({
     required super.nodeId,
     required super.contextId,

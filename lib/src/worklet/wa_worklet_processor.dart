@@ -27,11 +27,13 @@ import 'dart:typed_data';
 /// }
 /// ```
 abstract class WAWorkletProcessor {
+  /// The name of the processor class as registered via WAContext.audioWorklet.
   final String name;
 
   /// Port for receiving messages from the main thread.
   late final WAProcessorPort port;
 
+  /// Creates a new WorkletProcessor.
   WAWorkletProcessor({required this.name}) {
     port = WAProcessorPort();
   }
@@ -59,6 +61,7 @@ abstract class WAWorkletProcessor {
 
 /// Port for communication from the audio thread back to main thread.
 class WAProcessorPort {
+  /// Callback for messages received from the main thread (main → audio).
   void Function(dynamic)? onMessage;
 
   /// Send a message to the main thread (audio → main).

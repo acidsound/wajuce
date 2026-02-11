@@ -10,6 +10,7 @@ class WAWaveShaperNode extends WANode {
   Float32List? _curve;
   WAOverSampleType _oversample = WAOverSampleType.none;
 
+  /// Creates a new WaveShaperNode.
   WAWaveShaperNode({
     required super.nodeId,
     required super.contextId,

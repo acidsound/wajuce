@@ -1,3 +1,4 @@
+// ignore_for_file: public_member_api_docs
 /// Ring buffer for lock-free audio data transfer between Dart isolates.
 ///
 /// Used by the AudioWorklet system for main isolate ↔ audio isolate communication.
@@ -59,9 +60,12 @@ class RingBuffer {
 /// Multi-channel ring buffer — wraps one [RingBuffer] per channel.
 class MultiChannelRingBuffer {
   final List<RingBuffer> _channels;
+  /// The number of channels.
   final int channelCount;
+  /// The capacity of each channel in samples.
   final int capacity;
 
+  /// Creates a new MultiChannelRingBuffer.
   MultiChannelRingBuffer({required this.channelCount, required this.capacity})
       : _channels = List.generate(channelCount, (_) => RingBuffer(capacity));
 

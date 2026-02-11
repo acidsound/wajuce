@@ -25,6 +25,7 @@ class WAOfflineContext extends WAContext {
   final int _length;
   final double _offlineSampleRate;
 
+  /// Creates a new OfflineAudioContext.
   WAOfflineContext({
     required int numberOfChannels,
     required int length,

@@ -1,3 +1,4 @@
+// ignore_for_file: public_member_api_docs
 /// Stub Backend — fallback for unsupported platforms.
 ///
 /// All functions throw UnsupportedError. Used when neither

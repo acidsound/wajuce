@@ -7,10 +7,13 @@ import '../backend/backend.dart' as backend;
 /// An oscillator that generates a periodic waveform.
 /// Mirrors Web Audio API OscillatorNode.
 class WAOscillatorNode extends WANode {
+  /// The frequency of the oscillator in Hertz.
   late final WAParam frequency;
+  /// The detuning value in cents.
   late final WAParam detune;
   WAOscillatorType _type = WAOscillatorType.sine;
 
+  /// Creates a new OscillatorNode.
   WAOscillatorNode({
     required super.nodeId,
     required super.contextId,

@@ -1,21 +1,19 @@
-/// The AudioWorklet interface. Mirrors Web Audio API AudioWorklet.
-///
-/// Manages processor registration and the audio processing isolate.
-library;
-/// ```dart
-/// ctx.audioWorklet.registerProcessor('dx7-processor', () => DX7Processor());
-/// await ctx.audioWorklet.addModule('dx7-processor');
-/// ```
 import 'audio_isolate.dart';
 import 'wa_worklet_processor.dart';
 
+/// The AudioWorklet interface. Mirrors Web Audio API AudioWorklet.
+///
+/// Manages processor registration and the audio processing isolate.
 class WAWorklet {
+  /// The native context ID this worklet belongs to.
   final int contextId;
+  /// The sample rate of the audio context.
   final int sampleRate;
   final AudioIsolateManager _isolateManager = AudioIsolateManager();
   final Map<String, WAWorkletProcessor Function()> _factories = {};
   bool _isolateStarted = false;
 
+  /// Creates a new AudioWorklet manager.
   WAWorklet({required this.contextId, this.sampleRate = 44100});
 
   /// Register a processor factory by name.

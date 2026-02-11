@@ -21,19 +21,31 @@ import 'dart:typed_data';
 import 'backend/backend.dart' as backend;
 
 /// MIDI access state.
-enum WAMidiAccessState { pending, granted, denied }
+enum WAMidiAccessState {
+  /// Access request is pending.
+  pending,
+  /// Access has been granted.
+  granted,
+  /// Access has been denied.
+  denied,
+}
 
 /// A MIDI input port (receives messages from external devices).
 class WAMidiInput {
+  /// Unique identifier for the port.
   final String id;
+  /// Human-readable name of the port.
   final String name;
+  /// Manufacturer of the device.
   final String manufacturer;
+  /// The hardware port index.
   final int portIndex;
 
   /// Callback for incoming MIDI messages.
   /// [data] is the raw MIDI bytes, [timestamp] is in milliseconds.
   void Function(Uint8List data, double timestamp)? onMessage;
 
+  /// Creates a new MIDI input port representation.
   WAMidiInput({
     required this.id,
     required this.name,
@@ -57,11 +69,16 @@ class WAMidiInput {
 
 /// A MIDI output port (sends messages to external devices).
 class WAMidiOutput {
+  /// Unique identifier for the port.
   final String id;
+  /// Human-readable name of the port.
   final String name;
+  /// Manufacturer of the device.
   final String manufacturer;
+  /// The hardware port index.
   final int portIndex;
 
+  /// Creates a new MIDI output port representation.
   WAMidiOutput({
     required this.id,
     required this.name,
@@ -107,6 +124,7 @@ class WAMidi {
   StreamController<WAMidiInput>? _inputChangeController;
   StreamController<WAMidiOutput>? _outputChangeController;
 
+  /// Creates a new MIDI manager.
   WAMidi();
 
   /// Request MIDI access. Must be called before using inputs/outputs.

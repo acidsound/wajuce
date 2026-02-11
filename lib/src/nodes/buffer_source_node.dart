@@ -5,14 +5,21 @@ import '../backend/backend.dart' as backend;
 
 /// Plays an AudioBuffer. Mirrors Web Audio API AudioBufferSourceNode.
 class WABufferSourceNode extends WANode {
+  /// The rate at which the buffer is played back.
   late final WAParam playbackRate;
+  /// The detuning value in cents.
   late final WAParam detune;
+  /// Experimental: decay parameter for grain/buffer sources.
   late final WAParam decay;
   WABuffer? _buffer;
   bool _loop = false;
+
+  /// Start time for looping, in seconds.
   double loopStart = 0;
+  /// End time for looping, in seconds.
   double loopEnd = 0;
 
+  /// Creates a new BufferSourceNode.
   WABufferSourceNode({
     required super.nodeId,
     required super.contextId,

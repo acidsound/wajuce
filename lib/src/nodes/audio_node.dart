@@ -6,32 +6,29 @@ abstract class WANode {
   final int _nodeId;
   final int _contextId;
 
-  int _channelCount;
+  /// How channels are mapped when connecting nodes.
   WAChannelCountMode channelCountMode;
+  /// How to interpret channels (speakers vs discrete).
   WAChannelInterpretation channelInterpretation;
+  /// The number of channels used by this node.
+  int channelCount;
 
+  /// Base constructor for all audio nodes.
   WANode({
     required int nodeId,
     required int contextId,
-    int channelCount = 2,
+    this.channelCount = 2,
     this.channelCountMode = WAChannelCountMode.max,
     this.channelInterpretation =
         WAChannelInterpretation.speakers,
   })  : _nodeId = nodeId,
-        _contextId = contextId,
-        _channelCount = channelCount;
+        _contextId = contextId;
 
   /// Internal node ID used by the backend.
   int get nodeId => _nodeId;
 
   /// Internal context ID.
   int get contextId => _contextId;
-
-  /// The number of channels used by this node.
-  int get channelCount => _channelCount;
-  set channelCount(int count) {
-    _channelCount = count;
-  }
 
   /// Number of inputs this node accepts.
   int get numberOfInputs;

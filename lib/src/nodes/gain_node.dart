@@ -3,8 +3,10 @@ import '../audio_param.dart';
 
 /// A simple gain (volume) node. Mirrors Web Audio API GainNode.
 class WAGainNode extends WANode {
+  /// The gain amount.
   late final WAParam gain;
 
+  /// Creates a new GainNode.
   WAGainNode({
     required super.nodeId,
     required super.contextId,

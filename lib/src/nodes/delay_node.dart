@@ -3,6 +3,7 @@ import '../audio_param.dart';
 
 /// A delay line node. Mirrors Web Audio API DelayNode.
 class WADelayNode extends WANode {
+  /// The amount of delay to apply, in seconds.
   late final WAParam delayTime;
   final double _maxDelayTime;
 
@@ -12,6 +13,7 @@ class WADelayNode extends WANode {
   /// Experimental: internal feedback parameter (not in standard Web Audio API).
   late final WAParam feedback;
 
+  /// Creates a new DelayNode.
   WADelayNode({
     required super.nodeId,
     required super.contextId,

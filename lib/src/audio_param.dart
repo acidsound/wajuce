@@ -11,23 +11,22 @@ class WAParam {
   final double _defaultValue;
   final double _minValue;
   final double _maxValue;
-  WAAutomationRate _automationRate;
 
   double _value;
 
+  /// Creates a new AudioParameter.
   WAParam({
     required int nodeId,
     required String paramName,
     double defaultValue = 0.0,
     double minValue = -3.4028235e38,
     double maxValue = 3.4028235e38,
-    WAAutomationRate automationRate = WAAutomationRate.aRate,
+    this.automationRate = WAAutomationRate.aRate,
   })  : _nodeId = nodeId,
         _paramName = paramName,
         _defaultValue = defaultValue,
         _minValue = minValue,
         _maxValue = maxValue,
-        _automationRate = automationRate,
         _value = defaultValue;
 
   // ---------------------------------------------------------------------------
@@ -51,11 +50,7 @@ class WAParam {
   double get maxValue => _maxValue;
 
   /// Whether this parameter is a-rate (per-sample) or k-rate (per-block).
-  WAAutomationRate get automationRate => _automationRate;
-  set automationRate(WAAutomationRate rate) {
-    _automationRate = rate;
-    // Note: automation rate is Dart-only state for now
-  }
+  WAAutomationRate automationRate;
 
   // ---------------------------------------------------------------------------
   // Automation Methods — P1

@@ -9,6 +9,7 @@ class WABuffer {
   final num _sampleRate;
   final List<Float32List> _channels;
 
+  /// Creates a new audio buffer.
   WABuffer({
     int bufferId = 0,
     required int numberOfChannels,
@@ -37,7 +38,7 @@ class WABuffer {
   /// Number of audio channels.
   int get numberOfChannels => _numberOfChannels;
 
-  /// Get the data for a specific channel.
+  /// Get the data for a specific channel index.
   Float32List getChannelData(int channel) {
     assert(channel >= 0 && channel < _numberOfChannels);
     return _channels[channel];

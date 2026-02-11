@@ -41,8 +41,6 @@ export 'src/nodes/wave_shaper_node.dart';
 export 'src/worklet/wa_worklet.dart';
 export 'src/worklet/wa_worklet_node.dart';
 export 'src/worklet/wa_worklet_processor.dart';
-export 'src/worklet/ring_buffer.dart';
-export 'src/worklet/audio_isolate.dart';
 
 // MIDI
 export 'src/midi.dart';

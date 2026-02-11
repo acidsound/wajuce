@@ -1,3 +1,4 @@
+// ignore_for_file: public_member_api_docs
 /// Web Audio Backend — browser implementation via dart:js_interop.
 ///
 /// Passes through all calls to the browser's native Web Audio API.
@@ -161,9 +162,6 @@ extension type JSAudioBuffer._(JSObject _) implements JSObject {
 int _nextId = 1;
 final Map<int, JSObject> _nodes = {};
 final Map<int, JSAudioContext> _contexts = {};
-final Map<int, JSAudioBuffer> _audioBuffers = {};
-
-JSObject _getNode(int id) => _nodes[id]!;
 
 /// Resolve the AudioParam for a given node by paramName
 JSAudioParam? _getParam(int nodeId, String paramName) {

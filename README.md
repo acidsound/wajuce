@@ -1,5 +1,7 @@
 # wajuce
 
+[![Pub](https://img.shields.io/pub/v/wajuce.svg)](https://pub.dev/packages/wajuce)
+
 **JUCE-powered Web Audio API for Flutter.**
 
 `wajuce` provides a Web Audio API 1.1 compatible interface for Flutter and Dart. It allows developers to use familiar Web Audio patterns while delivering high-performance, low-latency audio processing via a native JUCE C++ backend.
@@ -56,6 +58,30 @@ graph TD
 | **AudioWorklet** | ⚠️ Partial | Isolate system done; High-performance Native sync pending |
 | **Web Backend** | ✅ Done | Native passthrough via `js_interop` |
 | **Build System** | ⚠️ Testing | Dual-mode CMake (JUCE/Stub) ready; Native builds in progress |
+
+---
+
+## 🎹 AudioWorklet
+Run custom DSP code in a dedicated high-priority Isolate:
+
+```dart
+// 1. Define processor
+class DX7Processor extends WAWorkletProcessor {
+  DX7Processor() : super(name: 'dx7');
+
+  @override
+  bool process(inputs, outputs, params) {
+    // DSP code here...
+    return true;
+  }
+}
+
+// 2. Register & Run
+ctx.audioWorklet.registerProcessor('dx7', () => DX7Processor());
+await ctx.audioWorklet.addModule('dx7');
+final node = ctx.createWorkletNode('dx7');
+node.connect(ctx.destination);
+```
 
 ---
 

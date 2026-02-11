@@ -16,8 +16,11 @@ import 'wa_worklet.dart';
 class WAWorkletNode extends WANode {
   final String _processorName;
   final WAWorklet _worklet;
+
+  /// The message port for bidirectional communication with the processor.
   late final WAMessagePort port;
 
+  /// Creates a new AudioWorkletNode.
   WAWorkletNode({
     required super.nodeId,
     required super.contextId,
@@ -43,6 +46,7 @@ class WAWorkletNode extends WANode {
     };
   }
 
+  /// The name of the registered processor.
   String get processorName => _processorName;
 
   @override
@@ -62,8 +66,11 @@ class WAWorkletNode extends WANode {
 class WAMessagePort {
   final int _nodeId;
   final WAWorklet _worklet;
+
+  /// Callback for messages received from the processor (audio → main thread).
   void Function(dynamic)? onMessage;
 
+  /// Creates a new message port for the given node.
   WAMessagePort({required int nodeId, required WAWorklet worklet})
       : _nodeId = nodeId,
         _worklet = worklet;

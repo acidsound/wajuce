@@ -1,7 +1,9 @@
 name: wajuce
 description: "JUCE-powered Web Audio API 1.1 for Flutter. Port your Web Audio apps to Flutter with minimal changes."
 version: 0.1.0
-homepage: https://github.com/acidsound/acidApps/tree/main/wajuce
+homepage: https://github.com/acidsound/wajuce
+repository: https://github.com/acidsound/wajuce
+issue_tracker: https://github.com/acidsound/wajuce/issues
 
 environment:
   sdk: ^3.5.4

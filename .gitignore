@@ -27,7 +27,7 @@ android/app/src/main/res/mipmap-*/
 
 # C++/CMake/JUCE
 native/engine/build/
-native/engine/vendor/
+# native/engine/vendor/
 *.o
 *.obj
 *.a

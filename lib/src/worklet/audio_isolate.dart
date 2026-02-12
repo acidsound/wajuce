@@ -14,6 +14,7 @@ import 'dart:typed_data';
 
 import 'wa_worklet_processor.dart';
 import 'ring_buffer.dart';
+import '../backend/backend_juce.dart' as backend;
 
 const int quantumSize = 128;
 
@@ -342,7 +343,7 @@ _BridgedNodeInfo? _setupBridgedNode(int bridgeId, WAWorkletProcessor processor) 
         outputs: [List.generate(numOutputs, (_) => Float32List(quantumSize))],
      );
    } catch (e) {
-     print('[_setupBridgedNode] Error: $e');
+     // Error handling in isolate
      return null;
    }
 }

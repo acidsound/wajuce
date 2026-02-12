@@ -5,6 +5,7 @@ import 'audio_node.dart';
 class WAChannelMergerNode extends WANode {
   final int _numberOfInputs;
 
+  /// Creates a new ChannelMergerNode.
   WAChannelMergerNode({
     required super.nodeId,
     required super.contextId,

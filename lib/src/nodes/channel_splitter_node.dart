@@ -5,6 +5,7 @@ import 'audio_node.dart';
 class WAChannelSplitterNode extends WANode {
   final int _numberOfOutputs;
 
+  /// Creates a new ChannelSplitterNode.
   WAChannelSplitterNode({
     required super.nodeId,
     required super.contextId,

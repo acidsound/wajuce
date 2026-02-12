@@ -25,7 +25,9 @@ extern "C" {
 // Context lifecycle
 // ============================================================================
 FFI_PLUGIN_EXPORT int32_t wajuce_context_create(int32_t sample_rate,
-                                                int32_t buffer_size);
+                                                int32_t buffer_size,
+                                                int32_t input_channels,
+                                                int32_t output_channels);
 FFI_PLUGIN_EXPORT void wajuce_context_destroy(int32_t ctx_id);
 FFI_PLUGIN_EXPORT double wajuce_context_get_time(int32_t ctx_id);
 FFI_PLUGIN_EXPORT double wajuce_context_get_sample_rate(int32_t ctx_id);
@@ -47,6 +49,20 @@ FFI_PLUGIN_EXPORT int32_t wajuce_create_buffer_source(int32_t ctx_id);
 FFI_PLUGIN_EXPORT int32_t wajuce_create_analyser(int32_t ctx_id);
 FFI_PLUGIN_EXPORT int32_t wajuce_create_stereo_panner(int32_t ctx_id);
 FFI_PLUGIN_EXPORT int32_t wajuce_create_wave_shaper(int32_t ctx_id);
+
+// Batch creation for Machine Voice
+// result_ids must be an int32_t array of size 7
+FFI_PLUGIN_EXPORT void wajuce_create_machine_voice(int32_t ctx_id,
+                                                   int32_t *result_ids);
+
+FFI_PLUGIN_EXPORT void wajuce_remove_node(int32_t ctx_id, int32_t node_id);
+FFI_PLUGIN_EXPORT int32_t wajuce_create_media_stream_source(int32_t ctx_id);
+FFI_PLUGIN_EXPORT int32_t
+wajuce_create_media_stream_destination(int32_t ctx_id);
+FFI_PLUGIN_EXPORT int32_t wajuce_create_channel_splitter(int32_t ctx_id,
+                                                         int32_t outputs);
+FFI_PLUGIN_EXPORT int32_t wajuce_create_channel_merger(int32_t ctx_id,
+                                                       int32_t inputs);
 
 // ============================================================================
 // Graph topology
@@ -83,6 +99,10 @@ FFI_PLUGIN_EXPORT void wajuce_param_cancel(int32_t node_id, const char *param,
 FFI_PLUGIN_EXPORT void wajuce_osc_set_type(int32_t node_id, int32_t type);
 FFI_PLUGIN_EXPORT void wajuce_osc_start(int32_t node_id, double when);
 FFI_PLUGIN_EXPORT void wajuce_osc_stop(int32_t node_id, double when);
+FFI_PLUGIN_EXPORT void wajuce_osc_set_periodic_wave(int32_t node_id,
+                                                    const float *real,
+                                                    const float *imag,
+                                                    int32_t len);
 
 // ============================================================================
 // BiquadFilter
@@ -128,7 +148,17 @@ FFI_PLUGIN_EXPORT void wajuce_wave_shaper_set_oversample(int32_t node_id,
 FFI_PLUGIN_EXPORT int32_t wajuce_create_worklet_bridge(int32_t ctx_id,
                                                        int32_t num_inputs,
                                                        int32_t num_outputs);
-FFI_PLUGIN_EXPORT void *wajuce_get_ring_buffer_ptr(int32_t bridge_id);
+// direction: 0 = To-Isolate, 1 = From-Isolate
+FFI_PLUGIN_EXPORT float *wajuce_worklet_get_buffer_ptr(int32_t bridge_id,
+                                                       int32_t direction,
+                                                       int32_t channel);
+FFI_PLUGIN_EXPORT int32_t *wajuce_worklet_get_read_pos_ptr(int32_t bridge_id,
+                                                           int32_t direction,
+                                                           int32_t channel);
+FFI_PLUGIN_EXPORT int32_t *wajuce_worklet_get_write_pos_ptr(int32_t bridge_id,
+                                                            int32_t direction,
+                                                            int32_t channel);
+FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_capacity(int32_t bridge_id);
 
 // ============================================================================
 // MIDI
@@ -141,6 +171,22 @@ FFI_PLUGIN_EXPORT void wajuce_midi_port_close(int32_t type, int32_t index);
 FFI_PLUGIN_EXPORT void wajuce_midi_output_send(int32_t index,
                                                const uint8_t *data, int32_t len,
                                                double timestamp);
+
+typedef void (*wajuce_midi_callback_t)(int32_t port_index, const uint8_t *data,
+                                       int32_t len, double timestamp);
+FFI_PLUGIN_EXPORT void
+wajuce_midi_set_callback(wajuce_midi_callback_t callback);
+
+FFI_PLUGIN_EXPORT void wajuce_midi_dispose();
+
+// ============================================================================
+// Audio Decoding
+// ============================================================================
+FFI_PLUGIN_EXPORT int32_t wajuce_decode_audio_data(const uint8_t *encoded_data,
+                                                   int32_t len, float *out_data,
+                                                   int32_t *out_frames,
+                                                   int32_t *out_channels,
+                                                   int32_t *out_sr);
 
 #ifdef __cplusplus
 }

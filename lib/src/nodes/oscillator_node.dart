@@ -1,6 +1,9 @@
 import 'audio_node.dart';
 import '../audio_param.dart';
 import '../enums.dart';
+import 'dart:ffi' as ffi;
+import 'package:ffi/ffi.dart' as ffi;
+import 'periodic_wave.dart';
 import '../backend/backend.dart' as backend;
 
 
@@ -58,8 +61,29 @@ class WAOscillatorNode extends WANode {
   }
 
   /// Set a custom PeriodicWave waveform.
-  void setPeriodicWave(/* WAPeriodicWave */ dynamic periodicWave) {
+  void setPeriodicWave(WAPeriodicWave periodicWave) {
     _type = WAOscillatorType.custom;
-    // TODO: Implement PeriodicWave pass-through
+    
+    // We need to pass the arrays to C++
+    // Allocate temporary memory for the call
+    final len = periodicWave.real.length;
+    if (len != periodicWave.imag.length) {
+      throw ArgumentError('Real and Imag arrays must have same length');
+    }
+
+    ffi.Arena arena = ffi.Arena();
+    try {
+      final pReal = arena<ffi.Float>(len);
+      final pImag = arena<ffi.Float>(len);
+      
+      for(int i=0; i<len; ++i) {
+        pReal[i] = periodicWave.real[i];
+        pImag[i] = periodicWave.imag[i];
+      }
+      
+      backend.oscSetPeriodicWave(nodeId, pReal, pImag, len);
+    } finally {
+      arena.releaseAll();
+    }
   }
 }

@@ -39,6 +39,10 @@ int createBufferSource(int ctxId) => _unsupported();
 int createAnalyser(int ctxId) => _unsupported();
 int createStereoPanner(int ctxId) => _unsupported();
 int createWaveShaper(int ctxId) => _unsupported();
+int createMediaStreamSource(int ctxId) => _unsupported();
+int createMediaStreamSource(int ctxId) => _unsupported();
+int createMediaStreamDestination(int ctxId) => _unsupported();
+List<int> createMachineVoice(int ctxId) => _unsupported();
 
 // ---------------------------------------------------------------------------
 // Graph

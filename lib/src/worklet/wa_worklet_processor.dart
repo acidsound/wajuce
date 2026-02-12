@@ -76,4 +76,9 @@ class WAProcessorPort {
 
   /// Internal: set by the audio isolate to wire up the SendPort.
   void Function(dynamic)? _sendCallback;
+  
+  /// Used by the system to bind the postMessage callback.
+  void bind(void Function(dynamic) callback) {
+    _sendCallback = callback;
+  }
 }

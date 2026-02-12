@@ -33,8 +33,9 @@ final ffi.DynamicLibrary _lib = () {
 // ---------------------------------------------------------------------------
 
 // Context
-typedef _CtxCreateN = ffi.Int32 Function(ffi.Int32, ffi.Int32);
-typedef _CtxCreateD = int Function(int, int);
+typedef _CtxCreateN = ffi.Int32 Function(
+    ffi.Int32, ffi.Int32, ffi.Int32, ffi.Int32);
+typedef _CtxCreateD = int Function(int, int, int, int);
 
 typedef _CtxVoidN = ffi.Void Function(ffi.Int32);
 typedef _CtxVoidD = void Function(int);
@@ -50,6 +51,8 @@ typedef _CreateNodeN = ffi.Int32 Function(ffi.Int32);
 typedef _CreateNodeD = int Function(int);
 typedef _CreateDelayN = ffi.Int32 Function(ffi.Int32, ffi.Float);
 typedef _CreateDelayD = int Function(int, double);
+typedef _CreateSplitterN = ffi.Int32 Function(ffi.Int32, ffi.Int32);
+typedef _CreateSplitterD = int Function(int, int);
 
 // Graph
 typedef _ConnectN = ffi.Void Function(
@@ -88,6 +91,10 @@ typedef _OscSetTypeN = ffi.Void Function(ffi.Int32, ffi.Int32);
 typedef _OscSetTypeD = void Function(int, int);
 typedef _OscStartN = ffi.Void Function(ffi.Int32, ffi.Double);
 typedef _OscStartD = void Function(int, double);
+typedef _OscSetPeriodicWaveN = ffi.Void Function(
+    ffi.Int32, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.Float>, ffi.Int32);
+typedef _OscSetPeriodicWaveD = void Function(
+    int, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.Float>, int);
 
 // Filter
 typedef _FilterSetTypeN = ffi.Void Function(ffi.Int32, ffi.Int32);
@@ -139,6 +146,26 @@ typedef _MidiOutputSendN = ffi.Void Function(
 typedef _MidiOutputSendD = void Function(
     int, ffi.Pointer<ffi.Uint8>, int, double);
 
+// Worklet Bridge
+typedef _CreateWorkletBridgeN = ffi.Int32 Function(
+    ffi.Int32, ffi.Int32, ffi.Int32);
+typedef _CreateWorkletBridgeD = int Function(int, int, int);
+
+typedef _WorkletGetBufN = ffi.Pointer<ffi.Float> Function(
+    ffi.Int32, ffi.Int32, ffi.Int32);
+typedef _WorkletGetBufD = ffi.Pointer<ffi.Float> Function(int, int, int);
+
+typedef _WorkletGetPosN = ffi.Pointer<ffi.Int32> Function(
+    ffi.Int32, ffi.Int32, ffi.Int32);
+typedef _WorkletGetPosD = ffi.Pointer<ffi.Int32> Function(int, int, int);
+
+typedef _WorkletGetCapN = ffi.Int32 Function(ffi.Int32);
+typedef _WorkletGetCapD = int Function(int);
+
+typedef _CreateMachineVoiceN = ffi.Void Function(
+    ffi.Int32, ffi.Pointer<ffi.Int32>);
+typedef _CreateMachineVoiceD = void Function(int, ffi.Pointer<ffi.Int32>);
+
 // ---------------------------------------------------------------------------
 // Lazy FFI lookups
 // ---------------------------------------------------------------------------
@@ -181,6 +208,36 @@ final _createStereoPanner = _lib
     .lookupFunction<_CreateNodeN, _CreateNodeD>('wajuce_create_stereo_panner');
 final _createWaveShaper = _lib
     .lookupFunction<_CreateNodeN, _CreateNodeD>('wajuce_create_wave_shaper');
+final _createMediaStreamSource = _lib.lookupFunction<_CreateNodeN,
+    _CreateNodeD>('wajuce_create_media_stream_source');
+final _createMediaStreamDestination = _lib.lookupFunction<_CreateNodeN,
+    _CreateNodeD>('wajuce_create_media_stream_destination');
+final _createChannelSplitter = _lib.lookupFunction<_CreateSplitterN,
+    _CreateSplitterD>('wajuce_create_channel_splitter');
+final _createChannelMerger = _lib.lookupFunction<_CreateSplitterN,
+    _CreateSplitterD>('wajuce_create_channel_merger');
+final _createMachineVoice = _lib.lookupFunction<_CreateMachineVoiceN,
+    _CreateMachineVoiceD>('wajuce_create_machine_voice');
+
+typedef _DecodeAudioDataN = ffi.Int32 Function(
+  ffi.Pointer<ffi.Uint8> encodedData,
+  ffi.Int32 len,
+  ffi.Pointer<ffi.Float> outData,
+  ffi.Pointer<ffi.Int32> outFrames,
+  ffi.Pointer<ffi.Int32> outChannels,
+  ffi.Pointer<ffi.Int32> outSr,
+);
+typedef _DecodeAudioDataD = int Function(
+  ffi.Pointer<ffi.Uint8> encodedData,
+  int len,
+  ffi.Pointer<ffi.Float> outData,
+  ffi.Pointer<ffi.Int32> outFrames,
+  ffi.Pointer<ffi.Int32> outChannels,
+  ffi.Pointer<ffi.Int32> outSr,
+);
+final _decodeAudioData =
+    _lib.lookupFunction<_DecodeAudioDataN, _DecodeAudioDataD>(
+        'wajuce_decode_audio_data');
 
 // Graph
 final _connect =
@@ -215,6 +272,8 @@ final _oscStart =
     _lib.lookupFunction<_OscStartN, _OscStartD>('wajuce_osc_start');
 final _oscStop =
     _lib.lookupFunction<_OscStartN, _OscStartD>('wajuce_osc_stop');
+final _oscSetPeriodicWave = _lib.lookupFunction<_OscSetPeriodicWaveN,
+    _OscSetPeriodicWaveD>('wajuce_osc_set_periodic_wave');
 
 // Filter
 final _filterSetType = _lib.lookupFunction<_FilterSetTypeN, _FilterSetTypeD>(
@@ -276,6 +335,36 @@ final _midiOutputSend =
     _lib.lookupFunction<_MidiOutputSendN, _MidiOutputSendD>(
         'wajuce_midi_output_send');
 
+// Worklet Bridge
+final _createWorkletBridge =
+    _lib.lookupFunction<_CreateWorkletBridgeN, _CreateWorkletBridgeD>(
+        'wajuce_create_worklet_bridge');
+final _workletGetBufferPtr =
+    _lib.lookupFunction<_WorkletGetBufN, _WorkletGetBufD>(
+        'wajuce_worklet_get_buffer_ptr');
+final _workletGetReadPosPtr =
+    _lib.lookupFunction<_WorkletGetPosN, _WorkletGetPosD>(
+        'wajuce_worklet_get_read_pos_ptr');
+final _workletGetWritePosPtr =
+    _lib.lookupFunction<_WorkletGetPosN, _WorkletGetPosD>(
+        'wajuce_worklet_get_write_pos_ptr');
+final _workletGetCapacity =
+    _lib.lookupFunction<_WorkletGetCapN, _WorkletGetCapD>(
+        'wajuce_worklet_get_capacity');
+
+typedef _MidiCallbackN = ffi.Void Function(ffi.Int32 portIndex,
+    ffi.Pointer<ffi.Uint8> data, ffi.Int32 len, ffi.Double timestamp);
+typedef _SetMidiCallbackN = ffi.Void Function(
+    ffi.Pointer<ffi.NativeFunction<_MidiCallbackN>>);
+typedef _SetMidiCallbackD = void Function(
+    ffi.Pointer<ffi.NativeFunction<_MidiCallbackN>>);
+final _setMidiCallback =
+    _lib.lookupFunction<_SetMidiCallbackN, _SetMidiCallbackD>(
+        'wajuce_midi_set_callback');
+final _midiDispose =
+    _lib.lookupFunction<ffi.Void Function(), void Function()>(
+        'wajuce_midi_dispose');
+
 // ---------------------------------------------------------------------------
 // Helper: Dart String → native C string (caller must free)
 // ---------------------------------------------------------------------------
@@ -295,9 +384,10 @@ void _freeCString(ffi.Pointer<ffi.Char> ptr) {
 // Backend API — Context
 // ---------------------------------------------------------------------------
 
-int contextCreate(int sampleRate, int bufferSize) {
-  // print('[wajuce] Dart: contextCreate sr=$sampleRate, bs=$bufferSize');
-  final id = _contextCreate(sampleRate, bufferSize);
+int contextCreate(int sampleRate, int bufferSize,
+    {int inputChannels = 2, int outputChannels = 2}) {
+  // print('[wajuce] Dart: contextCreate sr=$sampleRate, bs=$bufferSize, inCh=$inputChannels, outCh=$outputChannels');
+  final id = _contextCreate(sampleRate, bufferSize, inputChannels, outputChannels);
   // print('[wajuce] Dart: contextCreated, native id=$id');
   return id;
 }
@@ -310,6 +400,11 @@ void contextResume(int ctxId) => _contextResume(ctxId);
 void contextSuspend(int ctxId) => _contextSuspend(ctxId);
 void contextClose(int ctxId) => _contextClose(ctxId);
 int contextGetDestinationId(int ctxId) => _contextGetDestinationId(ctxId);
+
+int createChannelSplitter(int id, int outputs) =>
+    _createChannelSplitter(id, outputs);
+int createChannelMerger(int id, int inputs) =>
+    _createChannelMerger(id, inputs);
 
 // ---------------------------------------------------------------------------
 // Backend API — Node Factory
@@ -324,6 +419,17 @@ int createBufferSource(int ctxId) => _createBufferSource(ctxId);
 int createAnalyser(int ctxId) => _createAnalyser(ctxId);
 int createStereoPanner(int ctxId) => _createStereoPanner(ctxId);
 int createWaveShaper(int ctxId) => _createWaveShaper(ctxId);
+int createMediaStreamSource(int ctxId) => _createMediaStreamSource(ctxId);
+int createMediaStreamDestination(int ctxId) =>
+    _createMediaStreamDestination(ctxId);
+
+List<int> createMachineVoice(int ctxId) {
+  final ptr = calloc<ffi.Int32>(7);
+  _createMachineVoice(ctxId, ptr);
+  final result = List<int>.from(ptr.asTypedList(7));
+  calloc.free(ptr);
+  return result;
+}
 
 // ---------------------------------------------------------------------------
 // Backend API — Graph
@@ -393,6 +499,12 @@ void paramCancel(int nodeId, String paramName, double cancelTime) {
 void oscSetType(int nodeId, int type) => _oscSetType(nodeId, type);
 void oscStart(int nodeId, double when) => _oscStart(nodeId, when);
 void oscStop(int nodeId, double when) => _oscStop(nodeId, when);
+
+// PeriodicWave support
+void oscSetPeriodicWave(
+    int nodeId, ffi.Pointer<ffi.Float> real, ffi.Pointer<ffi.Float> imag, int len) {
+  _oscSetPeriodicWave(nodeId, real, imag, len);
+}
 
 // ---------------------------------------------------------------------------
 // Backend API — Filter
@@ -507,22 +619,53 @@ int createBuffer(int numberOfChannels, int length, int sampleRate) {
 WABuffer? getBuffer(int bufferId) => _bufferStore[bufferId];
 
 Future<WABuffer> decodeAudioData(int ctxId, Uint8List data) async {
-  // For now, decode on Dart side using raw PCM assumption.
-  // Full implementation would use native JUCE AudioFormatManager.
-  // This creates a minimal WABuffer from raw float32 PCM data.
-  if (data.length < 4) {
-    throw ArgumentError('Audio data too short');
+  final encodedDataPtr = calloc<ffi.Uint8>(data.length);
+  encodedDataPtr.asTypedList(data.length).setAll(0, data);
+
+  final framesPtr = calloc<ffi.Int32>();
+  final channelsPtr = calloc<ffi.Int32>();
+  final srPtr = calloc<ffi.Int32>();
+
+  // First pass: get dimensions
+  int res = _decodeAudioData(encodedDataPtr, data.length, ffi.Pointer.fromAddress(0),
+      framesPtr, channelsPtr, srPtr);
+
+  if (res != 0) {
+    calloc.free(encodedDataPtr);
+    calloc.free(framesPtr);
+    calloc.free(channelsPtr);
+    calloc.free(srPtr);
+    throw Exception('Failed to decode audio data');
   }
 
-  // Assume raw float32 mono PCM for stub. Real impl would call native.
-  const sampleRate = 44100;
-  final floatData = data.buffer.asFloat32List();
+  final frames = framesPtr.value;
+  final channels = channelsPtr.value;
+  final sampleRate = srPtr.value;
+
+  // Second pass: get data
+  final outDataPtr = calloc<ffi.Float>(frames * channels);
+  _decodeAudioData(encodedDataPtr, data.length, outDataPtr, framesPtr,
+      channelsPtr, srPtr);
+
   final buffer = WABuffer(
-    numberOfChannels: 1,
-    length: floatData.length,
-    sampleRate: sampleRate,
+    numberOfChannels: channels,
+    length: frames,
+    sampleRate: sampleRate.toDouble(),
   );
-  buffer.copyToChannel(Float32List.fromList(floatData), 0);
+
+  final flatData = outDataPtr.asTypedList(frames * channels);
+  for (int ch = 0; ch < channels; ch++) {
+    final channelData = Float32List.fromList(
+        flatData.sublist(ch * frames, (ch + 1) * frames));
+    buffer.copyToChannel(channelData, ch);
+  }
+
+  calloc.free(encodedDataPtr);
+  calloc.free(framesPtr);
+  calloc.free(channelsPtr);
+  calloc.free(srPtr);
+  calloc.free(outDataPtr);
+
   return buffer;
 }
 
@@ -530,7 +673,23 @@ Future<WABuffer> decodeAudioData(int ctxId, Uint8List data) async {
 // Backend API — WorkletBridge (Phase 8)
 // ---------------------------------------------------------------------------
 
-int createWorkletNode(int ctxId, int numInputs, int numOutputs) => -1;
+int createWorkletNode(int ctxId, int numInputs, int numOutputs) {
+  return _createWorkletBridge(ctxId, numInputs, numOutputs);
+}
+
+ffi.Pointer<ffi.Float> workletGetBufferPtr(
+        int bridgeId, int direction, int channel) =>
+    _workletGetBufferPtr(bridgeId, direction, channel);
+
+ffi.Pointer<ffi.Int32> workletGetReadPosPtr(
+        int bridgeId, int direction, int channel) =>
+    _workletGetReadPosPtr(bridgeId, direction, channel);
+
+ffi.Pointer<ffi.Int32> workletGetWritePosPtr(
+        int bridgeId, int direction, int channel) =>
+    _workletGetWritePosPtr(bridgeId, direction, channel);
+
+int workletGetCapacity(int bridgeId) => _workletGetCapacity(bridgeId);
 
 // ---------------------------------------------------------------------------
 // Backend API — MIDI
@@ -590,7 +749,29 @@ Future<MidiDeviceInfoBackend> midiGetDevices() async {
   );
 }
 
-void midiInputOpen(int portIndex) => _midiPortOpen(0, portIndex);
+void Function(int portIndex, Uint8List data, double timestamp)?
+    onMidiMessageReceived;
+
+ffi.NativeCallable<_MidiCallbackN>? _midiCallable;
+
+void _initMidi() {
+  if (_midiCallable != null) return;
+  _midiCallable =
+      ffi.NativeCallable<_MidiCallbackN>.listener(_nativeMidiCallback);
+  _setMidiCallback(_midiCallable!.nativeFunction);
+}
+
+void _nativeMidiCallback(
+    int portIndex, ffi.Pointer<ffi.Uint8> data, int len, double timestamp) {
+  final bytes = Uint8List.fromList(data.asTypedList(len));
+  onMidiMessageReceived?.call(portIndex, bytes, timestamp);
+}
+
+void midiInputOpen(int portIndex) {
+  _initMidi();
+  _midiPortOpen(0, portIndex);
+}
+
 void midiInputClose(int portIndex) => _midiPortClose(0, portIndex);
 void midiOutputOpen(int portIndex) => _midiPortOpen(1, portIndex);
 void midiOutputClose(int portIndex) => _midiPortClose(1, portIndex);
@@ -603,5 +784,7 @@ void midiOutputSend(int portIndex, Uint8List data, double timestamp) {
 }
 
 void midiDispose() {
-  // Close all open ports — JUCE handles cleanup on library unload
+  _midiDispose();
+  _midiCallable?.close();
+  _midiCallable = null;
 }

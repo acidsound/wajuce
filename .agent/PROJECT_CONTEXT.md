@@ -12,21 +12,20 @@ Flutter plugin providing Web Audio API 1.1-compatible interfaces.
 |:---:|:---|
 | **1** | Foundation: Dart API (27 Dart files), 9 node types, WAParam (12 automation methods), WABuffer, WAContext/WAOfflineContext, 3-backend conditional import, C-API header (32+ functions), C stub |
 | **2** | JUCE Engine: 6 AudioProcessors (`Processors.h`), NodeRegistry, ParamAutomation timeline, WajuceEngine with AudioProcessorGraph, full C bridge (`WajuceEngine.cpp`) |
-| **3** | AudioWorklet: Dart Isolate worker, SPSC RingBuffer, WAWorkletNode with MessagePort, WAContext.audioWorklet + createWorkletNode() |
-| **5** | MIDI API: WAMidi/WAMidiInput/WAMidiOutput (Dart), SysEx helper, device enumeration, hot-plug streams, C-API MIDI functions in header |
-| **8** | Polish: `dart analyze` → **0 issues**, CMake dual-mode (JUCE/stub) |
+| **3** | AudioWorklet: Dart Isolate worker, SPSC RingBuffer, WAWorkletNode with MessagePort, WAContext.audioWorklet + createWorkletNode(). **Hotfix**: Multi-listener support and reliable message routing. |
+| **4** | Buffer/I/O: `decodeAudioData()` native impl, WABufferSourceNode, MediaStream (mic/recording), **Feature**: `PeriodicWave` custom oscillators. |
+| **5** | MIDI API: WAMidi/WAMidiInput/WAMidiOutput (Dart), device enumeration, bidirectional communication (input/output). |
+| **8** | Polish: `dart analyze` → **0 issues**, CMake dual-mode (JUCE/stub), generalized 32-channel I/O. |
 
 ### ❌ NOT YET IMPLEMENTED
 | Phase | Content |
 |:---:|:---|
-| **4** | Buffer/I/O: `decodeAudioData()` native impl, BufferSource data transfer, MediaStream (mic/recording) |
-| **5** partial | MIDI C++ native impl (JUCE MidiInput/MidiOutput bridge in WajuceEngine.cpp) |
 | **6** | Web backend: `backend_web.dart` has stubs only — needs actual `dart:js_interop` calls |
 | **7** | Integration examples: Porting various Web Audio engines |
 
 ### ⚠️ NOT YET BUILD-TESTED
 - Native build (`flutter build macos/ios/android`) has NOT been tested
-- **JUCE Framework**: Must be placed in `native/engine/vendor/JUCE`. (Note: Previous symlink to `acidBros_flutter` is broken if that project was deleted)
+- **JUCE Framework**: Must be placed in `native/engine/vendor/JUCE`.
 
 ## File Inventory
 
@@ -81,6 +80,7 @@ native/engine/Source/ParamAutomation.h # Param scheduling timeline
 - **3-backend conditional import**: `dart.library.ffi` → JUCE, `dart.library.js_interop` → Web Audio, fallback → stub
 - **JUCE Framework**: Independent vendor setup in `native/engine/vendor/JUCE`
 - **WAJUCE_STUB_ONLY** CMake for building without JUCE
+- **WAWorklet Multi-Listener Routing**: `WAWorklet` maintains a listener registry to route messages from the audio isolate to multiple concurrent `WAWorkletNode` instances independently.
 - **Automatic Cyclic Connections (FeedbackBridge)**: Detects cycles during `connect()` and automatically inserts a `FeedbackSender`/`FeedbackReceiver` pair with a shared buffer (1-block delay) to allow feedback loops without violating JUCE's GraphQL DAG constraints.
 
 ## Reference Documents

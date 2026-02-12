@@ -16,7 +16,7 @@ Cross-platform audio engine using JUCE for native and Web Audio API for web.
   s.author           = { 'AcidApps' => 'dev@acidapps.io' }
 
   s.source           = { :path => '.' }
-  s.source_files     = 'Classes/*.{mm,c}'
+  s.source_files     = 'Classes/**/*.{h,m,mm,c,cpp}'
   s.dependency 'Flutter'
 
   s.platform = :ios, '12.0'
@@ -24,11 +24,12 @@ Cross-platform audio engine using JUCE for native and Web Audio API for web.
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
+    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++20',
     'GCC_PREPROCESSOR_DEFINITIONS' => [
       'JUCE_DISPLAY_SPLASH_SCREEN=0',
       'JUCE_USE_DARK_SPLASH_SCREEN=0',
       'JUCE_STANDALONE_APPLICATION=0',
+      'JUCE_IOS=1',
       'JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1',
       'JUCE_MODULE_AVAILABLE_juce_audio_basics=1',
       'JUCE_MODULE_AVAILABLE_juce_audio_devices=1',

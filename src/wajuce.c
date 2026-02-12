@@ -78,6 +78,15 @@ FFI_PLUGIN_EXPORT int32_t wajuce_create_wave_shaper(int32_t ctx_id) {
   return next_id++;
 }
 
+FFI_PLUGIN_EXPORT int32_t wajuce_create_media_stream_source(int32_t ctx_id) {
+  return next_id++;
+}
+
+FFI_PLUGIN_EXPORT int32_t
+wajuce_create_media_stream_destination(int32_t ctx_id) {
+  return next_id++;
+}
+
 // ============================================================================
 // Graph
 // ============================================================================
@@ -221,3 +230,11 @@ FFI_PLUGIN_EXPORT void wajuce_midi_port_close(int32_t type, int32_t index) {}
 FFI_PLUGIN_EXPORT void wajuce_midi_output_send(int32_t index,
                                                const uint8_t *data, int32_t len,
                                                double timestamp) {}
+
+FFI_PLUGIN_EXPORT int32_t wajuce_decode_audio_data(const uint8_t *encoded_data,
+                                                   int32_t len, float *out_data,
+                                                   int32_t *out_frames,
+                                                   int32_t *out_channels,
+                                                   int32_t *out_sr) {
+  return -1;
+}

@@ -24,7 +24,8 @@ namespace wajuce {
 
 class Engine : public juce::AudioSource {
 public:
-  Engine(double sampleRate = 44100.0, int bufferSize = 512);
+  Engine(double sampleRate = 44100.0, int bufferSize = 512,
+         int inputChannels = 2, int outputChannels = 2);
   ~Engine();
 
   // AudioSource
@@ -53,6 +54,12 @@ public:
   int32_t createBufferSource();
   int32_t createAnalyser();
   int32_t createWaveShaper();
+  int32_t createChannelSplitter(int32_t outputs);
+  int32_t createChannelMerger(int32_t inputs);
+  int32_t createMediaStreamSource();
+  int32_t createMediaStreamDestination();
+  int32_t createWorkletBridge(int32_t inputs, int32_t outputs);
+  void createMachineVoice(int32_t *resultIds);
   void removeNode(int32_t nodeId);
 
   // Graph
@@ -76,6 +83,8 @@ public:
   void oscSetType(int32_t nodeId, int type);
   void oscStart(int32_t nodeId, double when);
   void oscStop(int32_t nodeId, double when);
+  void oscSetPeriodicWave(int32_t nodeId, const float *real, const float *imag,
+                          int32_t len);
 
   // Filter control
   void filterSetType(int32_t nodeId, int type);

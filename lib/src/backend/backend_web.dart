@@ -300,6 +300,13 @@ int createStereoPanner(int ctxId) {
   return id;
 }
 
+int createMediaStreamDestination(int ctxId) =>
+    throw UnimplementedError('createMediaStreamDestination not supported on Web');
+
+List<int> createMachineVoice(int ctxId) {
+  throw UnimplementedError('createMachineVoice is a native optimization only');
+}
+
 int createWaveShaper(int ctxId) {
   final ctx = _contexts[ctxId]!;
   final node = ctx.createWaveShaper();

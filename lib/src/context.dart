@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'audio_buffer.dart';
 import 'enums.dart';
+import 'nodes/audio_node.dart';
 import 'nodes/audio_destination_node.dart';
 import 'nodes/gain_node.dart';
 import 'nodes/oscillator_node.dart';
@@ -12,6 +13,10 @@ import 'nodes/buffer_source_node.dart';
 import 'nodes/analyser_node.dart';
 import 'nodes/stereo_panner_node.dart';
 import 'nodes/wave_shaper_node.dart';
+import 'nodes/media_stream_nodes.dart';
+import 'nodes/channel_splitter_node.dart';
+import 'nodes/channel_merger_node.dart';
+import 'package:wajuce/src/nodes/periodic_wave.dart';
 import 'worklet/wa_worklet.dart';
 import 'worklet/wa_worklet_node.dart';
 import 'backend/backend.dart' as backend;
@@ -33,8 +38,9 @@ class WAContext {
   late final WAWorklet _worklet;
 
   /// Creates a new AudioContext.
-  WAContext({int sampleRate = 44100, int bufferSize = 512}) {
-    _ctxId = backend.contextCreate(sampleRate, bufferSize);
+  WAContext({int sampleRate = 44100, int bufferSize = 512, int numberOfChannels = 2}) {
+    _ctxId = backend.contextCreate(sampleRate, bufferSize,
+        inputChannels: numberOfChannels, outputChannels: numberOfChannels);
     final destId = backend.contextGetDestinationId(_ctxId);
     _destination = WADestinationNode(nodeId: destId, contextId: _ctxId);
     _worklet = WAWorklet(contextId: _ctxId, sampleRate: sampleRate);
@@ -55,6 +61,11 @@ class WAContext {
 
   /// Current audio time in seconds.
   double get currentTime => backend.contextGetTime(_ctxId);
+
+  // Helper for generating unique node IDs for Dart-side nodes (Worklets)
+  int _nextNodeId = 10000; // Start high to avoid collision with native IDs
+  /// Generates a unique node ID for manual node creation.
+  int createNodeId() => _nextNodeId++;
 
   /// The sample rate of this context.
   double get sampleRate => backend.contextGetSampleRate(_ctxId);
@@ -150,10 +161,44 @@ class WAContext {
     return WAWaveShaperNode(nodeId: id, contextId: _ctxId);
   }
 
+  /// Creates a [WAPeriodicWave] instance.
+  WAPeriodicWave createPeriodicWave(Float32List real, Float32List imag,
+      {bool disableNormalization = false}) {
+    return WAPeriodicWave(
+        real: real, imag: imag, disableNormalization: disableNormalization);
+  }
+
+  /// Creates a [WAChannelSplitterNode].
+  WAChannelSplitterNode createChannelSplitter([int numberOfOutputs = 6]) {
+    final id = backend.createChannelSplitter(_ctxId, numberOfOutputs);
+    return WAChannelSplitterNode(
+        nodeId: id, contextId: _ctxId, numberOfOutputs: numberOfOutputs);
+  }
+
+  /// Create a channel merger node.
+  WAChannelMergerNode createChannelMerger([int numberOfInputs = 6]) {
+    final id = backend.createChannelMerger(_ctxId, numberOfInputs);
+    return WAChannelMergerNode(
+        nodeId: id, contextId: _ctxId, numberOfInputs: numberOfInputs);
+  }
+
+  /// Creates a [WAMediaStreamSourceNode] from the given stream.
+  /// In this implementation, the stream usually represents the default microphone.
+  WAMediaStreamSourceNode createMediaStreamSource([dynamic stream]) {
+    final nodeId = backend.createMediaStreamSource(_ctxId);
+    return WAMediaStreamSourceNode(nodeId: nodeId, contextId: _ctxId);
+  }
+
+  /// Creates a [WAMediaStreamDestNode].
+  WAMediaStreamDestNode createMediaStreamDestination() {
+    final nodeId = backend.createMediaStreamDestination(_ctxId);
+    return WAMediaStreamDestNode(nodeId: nodeId, contextId: _ctxId);
+  }
+
   /// Create an AudioWorkletNode.
   WAWorkletNode createWorkletNode(String processorName,
       {Map<String, double> parameterDefaults = const {}}) {
-    final nodeId = _createNodeId();
+    final nodeId = backend.createWorkletNode(_ctxId, 2, 2); // default stereo
     return WAWorkletNode(
       nodeId: nodeId,
       contextId: _ctxId,
@@ -161,11 +206,6 @@ class WAContext {
       worklet: _worklet,
       parameterDefaults: parameterDefaults,
     );
-  }
-
-  int _createNodeId() {
-    // We use a gain node as a proxy to get a valid native ID for the bridge
-    return backend.createGain(_ctxId);
   }
 
 
@@ -181,5 +221,22 @@ class WAContext {
   /// Decode audio data from a byte array.
   Future<WABuffer> decodeAudioData(Uint8List audioData) {
     return backend.decodeAudioData(_ctxId, audioData);
+  }
+
+  /// Creates a specialized Machine Voice (Optimized batch creation).
+  /// Returns [Oscillator, Filter, Gain, Panner, Delay, DelayFb, DelayWet].
+  /// This is an optimization to avoid main thread blocking during voice creation.
+  List<WANode> createMachineVoice() {
+    final ids = backend.createMachineVoice(_ctxId);
+    // 0: Osc, 1: Filter, 2: Gain, 3: Panner, 4: Delay, 5: DelayFb, 6: DelayWet
+    return [
+      WAOscillatorNode(nodeId: ids[0], contextId: _ctxId),
+      WABiquadFilterNode(nodeId: ids[1], contextId: _ctxId),
+      WAGainNode(nodeId: ids[2], contextId: _ctxId),
+      WAStereoPannerNode(nodeId: ids[3], contextId: _ctxId),
+      WADelayNode(nodeId: ids[4], contextId: _ctxId, maxDelayTime: 5.0), // Safe max
+      WAGainNode(nodeId: ids[5], contextId: _ctxId),
+      WAGainNode(nodeId: ids[6], contextId: _ctxId),
+    ];
   }
 }

@@ -24,6 +24,8 @@ export 'src/audio_buffer.dart';
 
 // Nodes — Base
 export 'src/nodes/audio_node.dart';
+export 'src/nodes/channel_splitter_node.dart';
+export 'src/nodes/channel_merger_node.dart';
 export 'src/nodes/audio_destination_node.dart';
 
 // Nodes — P1 (Foundation)
@@ -36,6 +38,8 @@ export 'src/nodes/delay_node.dart';
 export 'src/nodes/buffer_source_node.dart';
 export 'src/nodes/analyser_node.dart';
 export 'src/nodes/wave_shaper_node.dart';
+export 'src/nodes/media_stream_nodes.dart';
+export 'src/nodes/periodic_wave.dart';
 
 // Worklet
 export 'src/worklet/wa_worklet.dart';

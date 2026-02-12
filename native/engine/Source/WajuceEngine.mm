@@ -6,25 +6,75 @@
 #include <cassert>
 #include <cstdio>
 #include <cstring>
+#include <juce_audio_devices/juce_audio_devices.h>
+#include <juce_audio_formats/juce_audio_formats.h>
 #ifdef JUCE_IOS
+#import <AVFoundation/AVFoundation.h>
 #import <Foundation/Foundation.h>
 #define WA_LOG(fmt, ...) fprintf(stderr, fmt "\n", ##__VA_ARGS__)
 #else
 #define WA_LOG(fmt, ...) fprintf(stderr, fmt "\n", ##__VA_ARGS__)
 #endif
 
+#include "../../../src/wajuce.h"
+
 namespace wajuce {
 
 using NodeID = juce::AudioProcessorGraph::NodeID;
+
+// ---- Globals ----
+wajuce_midi_callback_t g_midiGlobalCallback = nullptr;
+
+// MIDI Proxy Definition
+struct MidiInputProxy : public juce::MidiInputCallback {
+  int32_t index;
+  std::unique_ptr<juce::MidiInput> input;
+
+  MidiInputProxy(int32_t idx, std::unique_ptr<juce::MidiInput> in)
+      : index(idx), input(std::move(in)) {}
+
+  void handleIncomingMidiMessage(juce::MidiInput *source,
+                                 const juce::MidiMessage &message) override {
+    if (g_midiGlobalCallback) {
+      g_midiGlobalCallback(index, message.getRawData(),
+                           (int32_t)message.getRawDataSize(),
+                           message.getTimeStamp());
+    }
+  }
+};
+
+std::unordered_map<int32_t, std::unique_ptr<Engine>> g_engines;
+std::mutex g_engineMtx;
+int32_t g_nextCtxId = 1;
+
+std::unordered_map<int32_t, std::unique_ptr<MidiInputProxy>> g_midiInputs;
+std::unordered_map<int32_t, std::unique_ptr<juce::MidiOutput>> g_midiOutputs;
+std::mutex g_midiMtx;
+
+Engine *findEngineForNode(int32_t nodeId) {
+  std::lock_guard<std::mutex> lock(g_engineMtx);
+  for (auto &[id, engine] : g_engines) {
+    if (engine->getRegistry().get(nodeId))
+      return engine.get();
+  }
+  return nullptr;
+}
+
+static wajuce::Engine *getEngine(int32_t id) {
+  auto it = wajuce::g_engines.find(id);
+  return it != wajuce::g_engines.end() ? it->second.get() : nullptr;
+}
 
 // ============================================================================
 // Engine Implementation
 // ============================================================================
 
-Engine::Engine(double sr, int bs) : sampleRate(sr), bufferSize(bs) {
-  WA_LOG("[wajuce] Engine::Engine sr=%f, bs=%d", sr, bs);
+Engine::Engine(double sr, int bs, int inCh, int outCh)
+    : sampleRate(sr), bufferSize(bs) {
+  WA_LOG("[wajuce] Engine::Engine sr=%f, bs=%d, in=%d, out=%d", sr, bs, inCh,
+         outCh);
   graph = std::make_unique<juce::AudioProcessorGraph>();
-  graph->setPlayConfigDetails(2, 2, sampleRate, bufferSize);
+  graph->setPlayConfigDetails(inCh, outCh, sampleRate, bufferSize);
   graph->prepareToPlay(sampleRate, bufferSize);
 
   inputNode = graph->addNode(
@@ -34,7 +84,24 @@ Engine::Engine(double sr, int bs) : sampleRate(sr), bufferSize(bs) {
       std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
           juce::AudioProcessorGraph::AudioGraphIOProcessor::audioOutputNode));
 
-  auto err = deviceManager.initialiseWithDefaultDevices(0, 2);
+#ifdef JUCE_IOS
+  // Explicitly configure AVAudioSession for PlayAndRecord with default to
+  // speaker
+  auto session = [AVAudioSession sharedInstance];
+  NSError *error = nil;
+  [session setCategory:AVAudioSessionCategoryPlayAndRecord
+           withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker |
+                       AVAudioSessionCategoryOptionAllowBluetooth |
+                       AVAudioSessionCategoryOptionMixWithOthers
+                 error:&error];
+  if (error) {
+    WA_LOG("[wajuce] AVAudioSession error: %s",
+           [[error localizedDescription] UTF8String]);
+  }
+  [session setActive:YES error:nil];
+#endif
+
+  auto err = deviceManager.initialiseWithDefaultDevices(inCh, outCh);
   deviceManager.addAudioCallback(&sourcePlayer);
   sourcePlayer.setSource(this);
 }
@@ -49,7 +116,9 @@ void Engine::prepareToPlay(int samples, double sr) {
   WA_LOG("[wajuce] Engine::prepareToPlay sr=%f, bs=%d", sr, samples);
   sampleRate = sr;
   bufferSize = samples;
-  graph->setPlayConfigDetails(2, 2, sr, samples);
+  int inCh = graph->getMainBusNumInputChannels();
+  int outCh = graph->getMainBusNumOutputChannels();
+  graph->setPlayConfigDetails(inCh, outCh, sr, samples);
   graph->prepareToPlay(sr, samples);
 }
 
@@ -68,7 +137,7 @@ void Engine::getNextAudioBlock(const juce::AudioSourceChannelInfo &info) {
   juce::AudioBuffer<float> proxy(info.buffer->getArrayOfWritePointers(),
                                  info.buffer->getNumChannels(),
                                  info.startSample, info.numSamples);
-  proxy.clear();
+  // proxy.clear(); // DO NOT CLEAR - We need physical input from info.buffer
   juce::MidiBuffer midi;
   graph->processBlock(proxy, midi);
 
@@ -150,6 +219,36 @@ int32_t Engine::createWaveShaper() {
   return addToGraph(NodeType::WaveShaper,
                     std::make_unique<WaveShaperProcessor>());
 }
+int32_t Engine::createChannelSplitter(int32_t outputs) {
+  return addToGraph(NodeType::ChannelSplitter,
+                    std::make_unique<ChannelSplitterProcessor>(outputs));
+}
+int32_t Engine::createChannelMerger(int32_t inputs) {
+  return addToGraph(NodeType::ChannelMerger,
+                    std::make_unique<ChannelMergerProcessor>(inputs));
+}
+int32_t Engine::createMediaStreamSource() {
+  auto id = addToGraph(NodeType::MediaStreamSource,
+                       std::make_unique<MediaStreamSourceProcessor>());
+  if (id != -1) {
+    std::lock_guard<std::mutex> lock(graphMtx);
+    auto it = idToGraphNode.find(id);
+    if (it != idToGraphNode.end()) {
+      graph->addConnection({{inputNode->nodeID, 0}, {it->second, 0}});
+      graph->addConnection({{inputNode->nodeID, 1}, {it->second, 1}});
+    }
+  }
+  return id;
+}
+int32_t Engine::createMediaStreamDestination() {
+  return addToGraph(NodeType::MediaStreamDestination,
+                    std::make_unique<MediaStreamDestinationProcessor>());
+}
+
+int32_t Engine::createWorkletBridge(int32_t inputs, int32_t outputs) {
+  return addToGraph(NodeType::WorkletBridge,
+                    std::make_unique<WorkletBridgeProcessor>(inputs, outputs));
+}
 
 void Engine::removeNode(int32_t nodeId) {
   std::lock_guard<std::mutex> lock(graphMtx);
@@ -172,6 +271,97 @@ void Engine::removeNode(int32_t nodeId) {
   }
 
   registry.remove(nodeId);
+}
+
+// Batch creation for Machine Voice
+void Engine::createMachineVoice(int32_t *resultIds) {
+  std::lock_guard<std::mutex> lock(graphMtx);
+
+  // Create Nodes
+  // 0: Osc, 1: Filter, 2: Gain, 3: Panner, 4: Delay, 5: DelayFb, 6: DelayWet
+  auto osc = std::make_unique<OscillatorProcessor>();
+  auto filter = std::make_unique<BiquadFilterProcessor>();
+  auto gain = std::make_unique<GainProcessor>();
+  auto panner = std::make_unique<StereoPannerProcessor>();
+  auto delay = std::make_unique<DelayProcessor>();
+  auto delayFb = std::make_unique<GainProcessor>();
+  auto delayWet = std::make_unique<GainProcessor>();
+
+  // Configuration & Preparation (Minimal for batch, graph will handle rest)
+  const auto sr = sampleRate;
+  const auto bs = bufferSize;
+
+  // Set basic layout to 2 channels (Stereo) to avoid massive overhead of 32
+  osc->setPlayConfigDetails(0, 2, sr, bs);
+  osc->engineTimePtr = &currentTime;
+  osc->startTime = 0.0;
+
+  filter->setPlayConfigDetails(2, 2, sr, bs);
+  gain->setPlayConfigDetails(2, 2, sr, bs);
+  panner->setPlayConfigDetails(2, 2, sr, bs);
+  delay->setPlayConfigDetails(2, 2, sr, bs);
+  delayFb->setPlayConfigDetails(2, 2, sr, bs);
+  delayWet->setPlayConfigDetails(2, 2, sr, bs);
+
+  // Initial Params
+  gain->gain = 0.0f;
+  delay->delayTime = 0.5f; // 1.0 might be too long default
+  delayWet->gain = 0.0f;
+
+  // Add to Graph
+  auto nOsc = graph->addNode(std::move(osc));
+  auto nFilter = graph->addNode(std::move(filter));
+  auto nGain = graph->addNode(std::move(gain));
+  auto nPanner = graph->addNode(std::move(panner));
+  auto nDelay = graph->addNode(std::move(delay));
+  auto nDelayFb = graph->addNode(std::move(delayFb));
+  auto nDelayWet = graph->addNode(std::move(delayWet));
+
+  // INTERNAL Connections (No output connection yet - Lazy)
+  // Osc -> Filter -> Gain -> Panner
+  graph->addConnection({{nOsc->nodeID, 0}, {nFilter->nodeID, 0}});
+  graph->addConnection({{nFilter->nodeID, 0}, {nGain->nodeID, 0}});
+  graph->addConnection({{nGain->nodeID, 0}, {nPanner->nodeID, 0}});
+
+  // Gain -> Delay path
+  graph->addConnection({{nGain->nodeID, 0}, {nDelay->nodeID, 0}});
+  graph->addConnection({{nDelay->nodeID, 0}, {nDelayWet->nodeID, 0}});
+
+  // Delay Feedback loop
+  graph->addConnection({{nDelay->nodeID, 0}, {nDelayFb->nodeID, 0}});
+  // graph->addConnection({{nDelayFb->nodeID, 0}, {nDelay->nodeID, 0}}); //
+  // ILLEGAL DIRECT CYCLE - Causes O(N^2) validation overhead
+
+  // Store IDs in Registry and Map to Graph IDs
+  // We cannot use addToGraph() because we already hold the lock.
+
+  // Osc
+  resultIds[0] = registry.add(NodeType::Oscillator, nOsc->getProcessor());
+  idToGraphNode[resultIds[0]] = nOsc->nodeID;
+
+  // Filter
+  resultIds[1] = registry.add(NodeType::BiquadFilter, nFilter->getProcessor());
+  idToGraphNode[resultIds[1]] = nFilter->nodeID;
+
+  // Gain
+  resultIds[2] = registry.add(NodeType::Gain, nGain->getProcessor());
+  idToGraphNode[resultIds[2]] = nGain->nodeID;
+
+  // Panner
+  resultIds[3] = registry.add(NodeType::StereoPanner, nPanner->getProcessor());
+  idToGraphNode[resultIds[3]] = nPanner->nodeID;
+
+  // Delay
+  resultIds[4] = registry.add(NodeType::Delay, nDelay->getProcessor());
+  idToGraphNode[resultIds[4]] = nDelay->nodeID;
+
+  // DelayFb
+  resultIds[5] = registry.add(NodeType::Gain, nDelayFb->getProcessor());
+  idToGraphNode[resultIds[5]] = nDelayFb->nodeID;
+
+  // DelayWet
+  resultIds[6] = registry.add(NodeType::Gain, nDelayWet->getProcessor());
+  idToGraphNode[resultIds[6]] = nDelayWet->nodeID;
 }
 
 void Engine::connect(int32_t srcId, int32_t dstId, int output, int input) {
@@ -255,11 +445,20 @@ void Engine::connect(int32_t srcId, int32_t dstId, int output, int input) {
     }
   };
 
-  attemptConnect(output, input);
+  auto srcEntry = registry.get(srcId);
+  auto dstEntry = registry.get(dstId);
 
-  // Implicitly connect second channel for common stereo scenarios
-  if (output == 0 && input == 0) {
-    attemptConnect(1, 1);
+  bool isSplitter = srcEntry && srcEntry->type == NodeType::ChannelSplitter;
+  bool isMerger = dstEntry && dstEntry->type == NodeType::ChannelMerger;
+
+  if (isSplitter || isMerger) {
+    attemptConnect(output, input);
+  } else {
+    // Legacy/Default: Connect all matching channels (up to 32)
+    // Starting from the specified output/input indices.
+    for (int i = 0; i < 32; ++i) {
+      attemptConnect(output + i, input + i);
+    }
   }
 }
 
@@ -494,14 +693,58 @@ void Engine::oscStart(int32_t nodeId, double when) {
   if (entry && entry->type == NodeType::Oscillator)
     entry->asOsc()->start(when);
 }
-void Engine::oscStop(int32_t nodeId, double when) {
-  auto *entry = registry.get(nodeId);
+void Engine::oscStop(int32_t nid, double w) {
+  auto *entry = registry.get(nid);
   if (entry && entry->type == NodeType::Oscillator)
-    entry->asOsc()->stop(when);
+    entry->asOsc()->stop(w);
 }
 
-void Engine::filterSetType(int32_t nodeId, int type) {
-  auto *entry = registry.get(nodeId);
+void Engine::oscSetPeriodicWave(int32_t nid, const float *real,
+                                const float *imag, int32_t len) {
+  auto *entry = registry.get(nid);
+  if (entry && entry->type == NodeType::Oscillator) {
+    // Generate wavetable via additive synthesis (Inverse Fourier Approximation)
+    // Standard table size for good quality
+    const int tableSize = 4096;
+    std::vector<float> table(tableSize, 0.0f);
+
+    // x(t) = sum(real[k] * cos(2pi*k*t) + imag[k] * sin(2pi*k*t))
+    // We start from k=1 usually as k=0 is DC offset.
+    // If len <= 0, we do nothing or clear.
+
+    if (len > 0) {
+      // Handle DC offset if present (real[0])
+      float dc = real[0];
+
+      for (int i = 0; i < tableSize; ++i) {
+        double t = (double)i / tableSize;
+        double val = dc;
+
+        for (int k = 1; k < len; ++k) {
+          // Optimization: Precompute 2PI * k
+          double phase = 2.0 * juce::MathConstants<double>::pi * k * t;
+          val += real[k] * std::cos(phase) + imag[k] * std::sin(phase);
+        }
+        table[i] = (float)val;
+      }
+
+      // Normalize to [-1, 1] to prevent clipping
+      float maxVal = 0.0f;
+      for (float v : table)
+        maxVal = std::max(maxVal, std::abs(v));
+      if (maxVal > 1e-6f) {
+        float scale = 1.0f / maxVal;
+        for (float &v : table)
+          v *= scale;
+      }
+    }
+
+    entry->asOsc()->setPeriodicWave(table.data(), tableSize);
+  }
+}
+
+void Engine::filterSetType(int32_t nid, int type) {
+  auto *entry = registry.get(nid);
   if (entry && entry->type == NodeType::BiquadFilter)
     entry->asFilter()->filterType = type;
 }
@@ -568,11 +811,11 @@ void Engine::waveShaperSetOversample(int32_t nid, int t) {
 } // namespace wajuce
 
 extern "C" {
-#include "../../../src/wajuce.h"
-static wajuce::Engine *getEngine(int32_t ctx_id);
-FFI_PLUGIN_EXPORT int32_t wajuce_context_create(int32_t sr, int32_t bs) {
+using namespace wajuce;
+FFI_PLUGIN_EXPORT int32_t wajuce_context_create(int32_t sr, int32_t bs,
+                                                int32_t inCh, int32_t outCh) {
   std::lock_guard<std::mutex> lock(wajuce::g_engineMtx);
-  auto engine = std::make_unique<wajuce::Engine>((double)sr, bs);
+  auto engine = std::make_unique<wajuce::Engine>((double)sr, bs, inCh, outCh);
   int32_t id = wajuce::g_nextCtxId++;
   wajuce::g_engines[id] = std::move(engine);
   return id;
@@ -612,6 +855,13 @@ FFI_PLUGIN_EXPORT int32_t wajuce_context_get_destination_id(int32_t id) {
   auto *e = getEngine(id);
   return e ? e->getDestinationId() : 0;
 }
+FFI_PLUGIN_EXPORT void wajuce_create_machine_voice(int32_t ctx_id,
+                                                   int32_t *result_ids) {
+  auto *engine = wajuce::getEngine(ctx_id);
+  if (engine)
+    engine->createMachineVoice(result_ids);
+}
+
 FFI_PLUGIN_EXPORT void wajuce_context_remove_node(int32_t cid, int32_t nid) {
   auto *e = getEngine(cid);
   if (e)
@@ -652,6 +902,85 @@ FFI_PLUGIN_EXPORT int32_t wajuce_create_stereo_panner(int32_t id) {
 FFI_PLUGIN_EXPORT int32_t wajuce_create_wave_shaper(int32_t id) {
   auto *e = getEngine(id);
   return e ? e->createWaveShaper() : -1;
+}
+FFI_PLUGIN_EXPORT int32_t wajuce_create_media_stream_source(int32_t id) {
+  auto *e = getEngine(id);
+  return e ? e->createMediaStreamSource() : -1;
+}
+FFI_PLUGIN_EXPORT int32_t wajuce_create_media_stream_destination(int32_t id) {
+  auto *e = getEngine(id);
+  return e ? e->createMediaStreamDestination() : -1;
+}
+FFI_PLUGIN_EXPORT int32_t wajuce_create_worklet_bridge(int32_t id,
+                                                       int32_t inputs,
+                                                       int32_t outputs) {
+  auto *e = getEngine(id);
+  return e ? e->createWorkletBridge(inputs, outputs) : -1;
+}
+
+FFI_PLUGIN_EXPORT float *wajuce_worklet_get_buffer_ptr(int32_t bridge_id,
+                                                       int32_t direction,
+                                                       int32_t channel) {
+  auto *e = wajuce::findEngineForNode(bridge_id);
+  if (!e)
+    return nullptr;
+  auto *node = e->getRegistry().get(bridge_id);
+  if (!node || node->type != wajuce::NodeType::WorkletBridge)
+    return nullptr;
+  auto *rb = (direction == 0)
+                 ? node->asWorkletBridge()->toIsolate->getChannel(channel)
+                 : node->asWorkletBridge()->fromIsolate->getChannel(channel);
+  return rb ? rb->getBufferRawPtr() : nullptr;
+}
+
+FFI_PLUGIN_EXPORT int32_t *wajuce_worklet_get_read_pos_ptr(int32_t bridge_id,
+                                                           int32_t direction,
+                                                           int32_t channel) {
+  auto *e = wajuce::findEngineForNode(bridge_id);
+  if (!e)
+    return nullptr;
+  auto *node = e->getRegistry().get(bridge_id);
+  if (!node || node->type != wajuce::NodeType::WorkletBridge)
+    return nullptr;
+  auto *rb = (direction == 0)
+                 ? node->asWorkletBridge()->toIsolate->getChannel(channel)
+                 : node->asWorkletBridge()->fromIsolate->getChannel(channel);
+  return rb ? rb->getReadPosPtr() : nullptr;
+}
+
+FFI_PLUGIN_EXPORT int32_t *wajuce_worklet_get_write_pos_ptr(int32_t bridge_id,
+                                                            int32_t direction,
+                                                            int32_t channel) {
+  auto *e = wajuce::findEngineForNode(bridge_id);
+  if (!e)
+    return nullptr;
+  auto *node = e->getRegistry().get(bridge_id);
+  if (!node || node->type != wajuce::NodeType::WorkletBridge)
+    return nullptr;
+  auto *rb = (direction == 0)
+                 ? node->asWorkletBridge()->toIsolate->getChannel(channel)
+                 : node->asWorkletBridge()->fromIsolate->getChannel(channel);
+  return rb ? rb->getWritePosPtr() : nullptr;
+}
+
+FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_capacity(int32_t bridge_id) {
+  auto *e = wajuce::findEngineForNode(bridge_id);
+  if (!e)
+    return 0;
+  auto *node = e->getRegistry().get(bridge_id);
+  if (!node || node->type != wajuce::NodeType::WorkletBridge)
+    return 0;
+  return node->asWorkletBridge()->toIsolate->getChannel(0)->getCapacity();
+}
+FFI_PLUGIN_EXPORT int32_t wajuce_create_channel_splitter(int32_t id,
+                                                         int32_t outputs) {
+  auto *e = getEngine(id);
+  return e ? e->createChannelSplitter(outputs) : -1;
+}
+FFI_PLUGIN_EXPORT int32_t wajuce_create_channel_merger(int32_t id,
+                                                       int32_t inputs) {
+  auto *e = getEngine(id);
+  return e ? e->createChannelMerger(inputs) : -1;
 }
 
 FFI_PLUGIN_EXPORT void wajuce_connect(int32_t cid, int32_t sid, int32_t did,
@@ -723,6 +1052,14 @@ FFI_PLUGIN_EXPORT void wajuce_osc_stop(int32_t nid, double w) {
   if (e)
     e->oscStop(nid, w);
 }
+FFI_PLUGIN_EXPORT void wajuce_osc_set_periodic_wave(int32_t nid,
+                                                    const float *real,
+                                                    const float *imag,
+                                                    int32_t len) {
+  auto *e = wajuce::findEngineForNode(nid);
+  if (e)
+    e->oscSetPeriodicWave(nid, real, imag, len);
+}
 
 FFI_PLUGIN_EXPORT void wajuce_filter_set_type(int32_t nid, int32_t t) {
   auto *e = wajuce::findEngineForNode(nid);
@@ -758,26 +1095,26 @@ FFI_PLUGIN_EXPORT void wajuce_analyser_set_fft_size(int32_t nid, int32_t s) {
   if (e)
     e->analyserSetFftSize(nid, s);
 }
-FFI_PLUGIN_EXPORT void
-wajuce_analyser_get_byte_freq_data(int32_t nid, uint8_t *d, int32_t l) {
+FFI_PLUGIN_EXPORT void wajuce_analyser_get_byte_freq(int32_t nid, uint8_t *d,
+                                                     int32_t l) {
   auto *e = wajuce::findEngineForNode(nid);
   if (e)
     e->analyserGetByteFreqData(nid, d, l);
 }
-FFI_PLUGIN_EXPORT void
-wajuce_analyser_get_byte_time_data(int32_t nid, uint8_t *d, int32_t l) {
+FFI_PLUGIN_EXPORT void wajuce_analyser_get_byte_time(int32_t nid, uint8_t *d,
+                                                     int32_t l) {
   auto *e = wajuce::findEngineForNode(nid);
   if (e)
     e->analyserGetByteTimeData(nid, d, l);
 }
-FFI_PLUGIN_EXPORT void
-wajuce_analyser_get_float_freq_data(int32_t nid, float *d, int32_t l) {
+FFI_PLUGIN_EXPORT void wajuce_analyser_get_float_freq(int32_t nid, float *d,
+                                                      int32_t l) {
   auto *e = wajuce::findEngineForNode(nid);
   if (e)
     e->analyserGetFloatFreqData(nid, d, l);
 }
-FFI_PLUGIN_EXPORT void
-wajuce_analyser_get_float_time_data(int32_t nid, float *d, int32_t l) {
+FFI_PLUGIN_EXPORT void wajuce_analyser_get_float_time(int32_t nid, float *d,
+                                                      int32_t l) {
   auto *e = wajuce::findEngineForNode(nid);
   if (e)
     e->analyserGetFloatTimeData(nid, d, l);
@@ -796,23 +1133,113 @@ FFI_PLUGIN_EXPORT void wajuce_wave_shaper_set_oversample(int32_t nid,
     e->waveShaperSetOversample(nid, t);
 }
 
-static wajuce::Engine *getEngine(int32_t id) {
-  auto it = wajuce::g_engines.find(id);
-  return it != wajuce::g_engines.end() ? it->second.get() : nullptr;
+FFI_PLUGIN_EXPORT int32_t wajuce_decode_audio_data(const uint8_t *encoded_data,
+                                                   int32_t len, float *out_data,
+                                                   int32_t *out_frames,
+                                                   int32_t *out_channels,
+                                                   int32_t *out_sr) {
+  juce::AudioFormatManager formatManager;
+  formatManager.registerBasicFormats();
+
+  auto stream = std::make_unique<juce::MemoryInputStream>(encoded_data,
+                                                          (size_t)len, false);
+  std::unique_ptr<juce::AudioFormatReader> reader(
+      formatManager.createReaderFor(std::move(stream)));
+
+  if (reader == nullptr)
+    return -1;
+
+  *out_frames = (int32_t)reader->lengthInSamples;
+  *out_channels = (int32_t)reader->numChannels;
+  *out_sr = (int32_t)reader->sampleRate;
+
+  if (out_data != nullptr) {
+    juce::AudioBuffer<float> buffer((int)reader->numChannels,
+                                    (int)reader->lengthInSamples);
+    reader->read(&buffer, 0, (int)reader->lengthInSamples, 0, true, true);
+
+    // Pack data for Dart: [ch0_samp0..ch0_sampN, ch1_samp0..ch1_sampN, ...]
+    for (int ch = 0; ch < (int)reader->numChannels; ++ch) {
+      std::memcpy(out_data + ch * (size_t)reader->lengthInSamples,
+                  buffer.getReadPointer(ch),
+                  (size_t)reader->lengthInSamples * sizeof(float));
+    }
+  }
+
+  return 0;
+}
+
+FFI_PLUGIN_EXPORT int32_t wajuce_midi_get_port_count(int32_t type) {
+  if (type == 0)
+    return juce::MidiInput::getAvailableDevices().size();
+  return juce::MidiOutput::getAvailableDevices().size();
+}
+
+FFI_PLUGIN_EXPORT void wajuce_midi_get_port_name(int32_t type, int32_t index,
+                                                 char *buffer,
+                                                 int32_t max_len) {
+  auto devices = (type == 0) ? juce::MidiInput::getAvailableDevices()
+                             : juce::MidiOutput::getAvailableDevices();
+  if (index >= 0 && index < devices.size()) {
+    juce::String name = devices[index].name;
+    name.copyToUTF8(buffer, (size_t)max_len);
+  }
+}
+
+FFI_PLUGIN_EXPORT void wajuce_midi_port_open(int32_t type, int32_t index) {
+  std::lock_guard<std::mutex> lock(wajuce::g_midiMtx);
+  auto devices = (type == 0) ? juce::MidiInput::getAvailableDevices()
+                             : juce::MidiOutput::getAvailableDevices();
+  if (index >= 0 && index < devices.size()) {
+    if (type == 0) {
+      if (wajuce::g_midiInputs.count(index))
+        return;
+      auto proxy = std::make_unique<wajuce::MidiInputProxy>(index, nullptr);
+      auto input =
+          juce::MidiInput::openDevice(devices[index].identifier, proxy.get());
+      if (input) {
+        proxy->input = std::move(input);
+        proxy->input->start();
+        wajuce::g_midiInputs[index] = std::move(proxy);
+      }
+    } else {
+      if (wajuce::g_midiOutputs.count(index))
+        return;
+      auto output = juce::MidiOutput::openDevice(devices[index].identifier);
+      if (output) {
+        wajuce::g_midiOutputs[index] = std::move(output);
+      }
+    }
+  }
+}
+
+FFI_PLUGIN_EXPORT void wajuce_midi_port_close(int32_t type, int32_t index) {
+  std::lock_guard<std::mutex> lock(wajuce::g_midiMtx);
+  if (type == 0) {
+    wajuce::g_midiInputs.erase(index);
+  } else {
+    wajuce::g_midiOutputs.erase(index);
+  }
+}
+
+FFI_PLUGIN_EXPORT void wajuce_midi_output_send(int32_t index,
+                                               const uint8_t *data, int32_t len,
+                                               double timestamp) {
+  std::lock_guard<std::mutex> lock(wajuce::g_midiMtx);
+  auto it = wajuce::g_midiOutputs.find(index);
+  if (it != wajuce::g_midiOutputs.end()) {
+    it->second->sendMessageNow(juce::MidiMessage(data, len));
+  }
+}
+
+FFI_PLUGIN_EXPORT void wajuce_midi_set_callback(wajuce_midi_callback_t cb) {
+  wajuce::g_midiGlobalCallback = cb;
+}
+
+FFI_PLUGIN_EXPORT void wajuce_midi_dispose() {
+  std::lock_guard<std::mutex> lock(wajuce::g_midiMtx);
+  wajuce::g_midiInputs.clear();
+  wajuce::g_midiOutputs.clear();
 }
 
 } // extern "C"
-
-namespace wajuce {
-std::unordered_map<int32_t, std::unique_ptr<Engine>> g_engines;
-std::mutex g_engineMtx;
-int32_t g_nextCtxId = 1;
-
-Engine *findEngineForNode(int32_t nodeId) {
-  for (auto &[id, engine] : g_engines) {
-    if (engine->getRegistry().get(nodeId))
-      return engine.get();
-  }
-  return nullptr;
-}
-} // namespace wajuce

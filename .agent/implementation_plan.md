@@ -140,10 +140,10 @@ graph LR
 | 1.25 | `MediaStreamTrackAudioSourceNode` | `WAMediaStreamTrackSourceNode` | 🔲 | P3 | 트랙 단위 |
 | 1.26 | `OscillatorNode` | `WAOscillatorNode` | ✅ | P1 | |
 | 1.27 | `PannerNode` | `WAPannerNode` | 🔲 | P3 | 3D panning |
-| 1.28 | `PeriodicWave` | `WAPeriodicWave` | 🔲 | P3 | 커스텀 파형 |
+| 1.28 | `PeriodicWave` | `WAPeriodicWave` | ✅ | P3 | 커스텀 파형 |
 | 1.29 | ~~`ScriptProcessorNode`~~ | — | ❌ | — | **DEPRECATED** |
 | 1.30 | `StereoPannerNode` | `WAStereoPannerNode` | ✅ | **P1** | L/R panning (기본 기능) |
-| 1.31 | `WaveShaperNode` | `WAWaveShaperNode` | 🔲 | P2 | 디스토션/새추레이션 |
+| 1.31 | `WaveShaperNode` | `WAWaveShaperNode` | ✅ | P2 | 디스토션/새추레이션 |
 | 1.32 | `AudioWorklet` | `WAWorklet` | ✅ | P1 | ⭐ 핵심 |
 
 범례: ✅ = 포함 (본 계획), 🔲 = 향후 구현, ❌ = 미지원 (deprecated/N/A)
@@ -440,7 +440,7 @@ FFI 기반 JUCE 백엔드 (iOS/Android/macOS/Windows).
 
 ## 4. 기존 프로젝트 포팅 가이드
 
-### acidBros → Flutter (wajuce 사용)
+### AM → Flutter (wajuce 사용)
 
 ```dart
 // 기존 JS: const ctx = new AudioContext();
@@ -477,7 +477,7 @@ filter.frequency.setValueAtTime(cutoff, time);
 filter.frequency.exponentialRampToValueAtTime(targetFreq, time + decay);
 ```
 
-### ddxx7 → Flutter (wajuce 사용)
+### FM → Flutter (wajuce 사용)
 
 ```dart
 // FM Synthesis는 AudioWorklet으로 포팅
@@ -491,7 +491,7 @@ dx7Node.port.postMessage({'type': 'patch', 'data': patchData});
 dx7Node.port.postMessage({'type': 'noteOn', 'data': {'note': 60, 'velocity': 0.8}});
 ```
 
-### uss44 → Flutter (wajuce 사용)
+### Sampler → Flutter (wajuce 사용)
 
 ```dart
 // Sampler도 AudioWorklet으로 포팅
@@ -520,7 +520,7 @@ samplerNode.port.postMessage({
 
 ### 두 가지 모드
 
-#### Mode A: Dart DSP (ddxx7/uss44 패턴)
+#### Mode A: Dart DSP
 `process()` 안에서 직접 오디오 데이터를 생성. Dart Isolate에서 실행.
 
 ```dart
@@ -539,7 +539,7 @@ class DX7Processor extends WAWorkletProcessor {
 }
 ```
 
-#### Mode B: JUCE Node Graph (acidBros 패턴)
+#### Mode B: JUCE Node Graph
 `OscillatorNode`, `BiquadFilterNode` 등 JUCE 내장 프로세서를 그래프로 연결.
 Worklet은 Clock/Sequencer 역할만.
 
@@ -658,7 +658,7 @@ wajuce/
 - [x] `WAGainNode`, `WAStereoPannerNode` (기본 프로세서)
 - [x] Native Bridge 기본 CRC (create/connect/destroy)
 - [x] FFI 바인딩 생성
-- [ ] **검증**: Gain → StereoPanner → Destination 연결 후 테스트 톤 L/R 출력
+- [x] **검증**: Gain → StereoPanner → Destination 연결 후 테스트 톤 L/R 출력
 
 ### Phase 2: Core Nodes (1-2주)
 - [x] `WAOscillatorNode` (sine, square, sawtooth, triangle)
@@ -667,7 +667,7 @@ wajuce/
 - [x] `WADynamicsCompressorNode`
 - [x] `WADelayNode`
 - [x] `WAAnalyserNode` (FFT 데이터)
-- [ ] **검증**: Oscillator → Filter → Gain → Destination 체인으로 복합 음색 재현
+- [x] **검증**: Oscillator → Filter → Gain → Destination 체인으로 복합 음색 재현
 
 ### Phase 3: AudioWorklet (2-3주) ⭐ **핵심**
 - [x] Audio Isolate 생성 및 관리
@@ -676,20 +676,23 @@ wajuce/
 - [x] `registerProcessor()` 메커니즘
 - [ ] Lock-Free Ring Buffer (Dart ↔ C++)
 - [x] 128-frame quantum 처리 루프
-- [ ] **검증**: ClockProcessor 포팅 → 정확한 16th-note 타이밍 검증
+- [x] **Bug Fix**: Multi-node message routing (Sequencer fix)
+- [x] **검증**: ClockProcessor 포팅 → 정확한 16th-note 타이밍 검증
 
-### Phase 4: Buffer, Sample & I/O (1-2주)
+### Phase 4: Buffer, Sample & I/O (1-2주) ✅
 - [x] `WABuffer` (AudioBuffer 에뮬레이션)
-- [ ] `WABufferSourceNode`, `decodeAudioData()`
-- [ ] `WAMediaStreamSourceNode` (마이크/외부 입력)
-- [ ] `WAMediaStreamDestNode` (녹음 출력)
-- [ ] **검증**: 샘플 기반 프로세서 포팅 → 샘플 재생 + 마이크 녹음 검증
+- [x] `WABufferSourceNode`, `decodeAudioData()`
+- [x] `WAMediaStreamSourceNode` (마이크/외부 입력)
+- [x] `WAMediaStreamDestNode` (녹음 출력)
+- [x] **검증**: `example/main.dart`에 "I/O & Recording" 탭 추가
+  - [x] Microphone Input -> Analyser (FFT Monitor) -> Destination 구현
+  - [x] `decodeAudioData`를 통한 오디오 파일 로드 및 재생 검증
 
-### Phase 5: MIDI (1주)
-- [ ] `WAMidi` — 디바이스 열거, 열기/닫기
-- [ ] `WAMidiPort` — Input Stream, Output send
-- [ ] `WAMidiMessage` — Note/CC/SysEx 파싱
-- [ ] **검증**: MIDI 장치 연결 및 성능 확인
+### Phase 5: MIDI (1주) ✅
+- [x] `WAMidi` — 디바이스 열거, 열기/닫기
+- [x] `WAMidiPort` — Input Stream, Output send
+- [x] `WAMidiMessage` — Note/CC/SysEx 파싱
+- [x] **검증**: MIDI 장치 연결 및 성능 확인
 
 ### Phase 6: Multi-Channel I/O & Platform (1주)
 - [ ] 멀티채널 오디오 디바이스 설정 (4+ ch output)

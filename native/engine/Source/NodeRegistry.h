@@ -24,6 +24,11 @@ enum class NodeType {
   BufferSource,
   Analyser,
   WaveShaper,
+  MediaStreamSource,
+  MediaStreamDestination,
+  ChannelSplitter,
+  ChannelMerger,
+  WorkletBridge,
 };
 
 struct NodeEntry {
@@ -56,6 +61,15 @@ struct NodeEntry {
   }
   WaveShaperProcessor *asWaveShaper() {
     return dynamic_cast<WaveShaperProcessor *>(processor);
+  }
+  MediaStreamSourceProcessor *asMediaStreamSource() {
+    return dynamic_cast<MediaStreamSourceProcessor *>(processor);
+  }
+  MediaStreamDestinationProcessor *asMediaStreamDestination() {
+    return dynamic_cast<MediaStreamDestinationProcessor *>(processor);
+  }
+  WorkletBridgeProcessor *asWorkletBridge() {
+    return dynamic_cast<WorkletBridgeProcessor *>(processor);
   }
 
   float getParam(const char *paramName) {

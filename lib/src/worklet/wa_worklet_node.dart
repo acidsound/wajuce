@@ -30,7 +30,9 @@ class WAWorkletNode extends WANode {
   })  : _processorName = processorName,
         _worklet = worklet {
     // Create the processor in the audio isolate
-    _worklet.createNode(nodeId, processorName, parameterDefaults);
+    // On native JUCE, the nodeId IS the bridgeId (returned from createWorkletNode)
+    _worklet.createNode(nodeId, processorName,
+        paramDefaults: parameterDefaults, bridgeId: nodeId);
 
     // Set up bidirectional message port
     port = WAMessagePort(
@@ -39,11 +41,9 @@ class WAWorkletNode extends WANode {
     );
 
     // Listen for messages from the processor
-    _worklet.onProcessorMessage = (id, data) {
-      if (id == nodeId) {
-        port.onMessage?.call(data);
-      }
-    };
+    _worklet.addMessageListener(nodeId, (data) {
+      port.onMessage?.call(data);
+    });
   }
 
   /// The name of the registered processor.

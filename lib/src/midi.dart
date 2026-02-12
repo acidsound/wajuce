@@ -135,12 +135,21 @@ class WAMidi {
       final success = await backend.midiRequestAccess(sysex: sysex);
       _state = success ? WAMidiAccessState.granted : WAMidiAccessState.denied;
       if (success) {
+        backend.onMidiMessageReceived = _handleMidiMessage;
         await _refreshDevices();
       }
       return success;
     } catch (e) {
       _state = WAMidiAccessState.denied;
       return false;
+    }
+  }
+
+  void _handleMidiMessage(int portIndex, Uint8List data, double timestamp) {
+    for (final input in _inputs) {
+      if (input.portIndex == portIndex) {
+        input.onMessage?.call(data, timestamp);
+      }
     }
   }
 

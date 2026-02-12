@@ -12,8 +12,7 @@ Before any build or development task, verify if JUCE is correctly placed.
 
 - **Required Path**: `native/engine/vendor/JUCE`
 - **Check Command**: `ls -d native/engine/vendor/JUCE/modules`
-- **Symptom 1 (Missing)**: Directory does not exist.
-- **Symptom 2 (Broken Symlink)**: Directory exists but is a broken link (often pointing to a deleted `acidBros_flutter` path).
+- **Symptom (Missing)**: Directory does not exist.
 
 ## 2. Setup Procedures
 

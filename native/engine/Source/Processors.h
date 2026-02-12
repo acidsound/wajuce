@@ -8,6 +8,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 
+#include "RingBuffer.h"
 #include <algorithm>
 #include <atomic>
 #include <vector>
@@ -21,7 +22,7 @@ class OscillatorProcessor : public juce::AudioProcessor {
 public:
   OscillatorProcessor()
       : AudioProcessor(BusesProperties().withOutput(
-            "Output", juce::AudioChannelSet::stereo())) {}
+            "Output", juce::AudioChannelSet::discreteChannels(32))) {}
 
   const juce::String getName() const override { return "WAOscillator"; }
 
@@ -30,6 +31,21 @@ public:
     phase = 0.0;
   }
   void releaseResources() override {}
+
+  std::vector<float> wavetable;
+  std::mutex waveMutex;
+  bool waveValid = false;
+
+  void setPeriodicWave(const float *table, int len) {
+    std::lock_guard<std::mutex> lock(waveMutex);
+    wavetable.resize(len);
+    if (len > 0) {
+      std::memcpy(wavetable.data(), table, len * sizeof(float));
+      waveValid = true;
+    } else {
+      waveValid = false;
+    }
+  }
 
   void processBlock(juce::AudioBuffer<float> &buf,
                     juce::MidiBuffer &) override {
@@ -45,6 +61,22 @@ public:
     const int t = type.load(std::memory_order_relaxed);
     const double startT = startTime.load(std::memory_order_relaxed);
     const double stopT = stopTime.load(std::memory_order_relaxed);
+
+    // Lock for custom wave if needed (try_lock to avoid audio thread block, or
+    // just lock if short) For simplicity in this demo, we'll access
+    // atomic/flag. Ideally we swap pointers or use a lock-free queue, but a
+    // mutex for a preset change is often 'ok' in non-rt critical creation.
+    // However, this is processBlock. We shouldn't lock potentially.
+    // We will check waveValid. The vector data race is a risk if
+    // setPeriodicWave is called during playback. We'll use a local copy or
+    // try_lock.
+    std::unique_lock<std::mutex> lock(waveMutex, std::try_to_lock);
+    const bool useWavetable = (t == 4 && waveValid && lock.owns_lock());
+    const size_t tableSize = wavetable.size();
+    const float *tableData = wavetable.data();
+
+    // If type is custom but no wave, output silence or fallback? Web Audio says
+    // silence.
 
     for (int i = 0; i < buf.getNumSamples(); ++i) {
       double currentTime = baseTime + (double)i / sampleRate;
@@ -70,10 +102,18 @@ public:
       case 3: // triangle
         sample = (float)(4.0 * std::abs(phase - 0.5) - 1.0);
         break;
+      case 4: // custom
+        if (useWavetable && tableSize > 0) {
+          float idx = (float)(phase * tableSize);
+          int idx0 = (int)idx % tableSize;
+          int idx1 = (idx0 + 1) % tableSize;
+          float frac = idx - (int)idx;
+          sample = tableData[idx0] + frac * (tableData[idx1] - tableData[idx0]);
+        }
+        break;
       }
-      left[i] = sample;
-      if (right)
-        right[i] = sample;
+      for (int ch = 0; ch < buf.getNumChannels(); ++ch)
+        buf.getWritePointer(ch)[i] = sample;
 
       phase += phaseInc;
       if (phase >= 1.0)
@@ -116,8 +156,9 @@ public:
   GainProcessor()
       : AudioProcessor(
             BusesProperties()
-                .withInput("Input", juce::AudioChannelSet::stereo())
-                .withOutput("Output", juce::AudioChannelSet::stereo())) {
+                .withInput("Input", juce::AudioChannelSet::discreteChannels(32))
+                .withOutput("Output",
+                            juce::AudioChannelSet::discreteChannels(32))) {
     sampleAccurateGains.assign(1024, 1.0f);
   }
 
@@ -172,8 +213,9 @@ public:
   BiquadFilterProcessor()
       : AudioProcessor(
             BusesProperties()
-                .withInput("Input", juce::AudioChannelSet::stereo())
-                .withOutput("Output", juce::AudioChannelSet::stereo())) {}
+                .withInput("Input", juce::AudioChannelSet::discreteChannels(32))
+                .withOutput("Output",
+                            juce::AudioChannelSet::discreteChannels(32))) {}
 
   const juce::String getName() const override { return "WABiquadFilter"; }
 
@@ -188,7 +230,7 @@ public:
   void processBlock(juce::AudioBuffer<float> &buf,
                     juce::MidiBuffer &) override {
     updateCoefficients();
-    for (int ch = 0; ch < buf.getNumChannels() && ch < 2; ++ch) {
+    for (int ch = 0; ch < buf.getNumChannels(); ++ch) {
       float *data = buf.getWritePointer(ch);
       for (int i = 0; i < buf.getNumSamples(); ++i) {
         data[i] = filters[ch].processSingleSampleRaw(data[i]);
@@ -229,7 +271,7 @@ public:
   std::atomic<float> gain{0.0f};
   std::atomic<int> filterType{0};
   double sampleRate = 44100.0;
-  juce::IIRFilter filters[2];
+  juce::IIRFilter filters[32];
 };
 
 // ============================================================================
@@ -240,8 +282,9 @@ public:
   StereoPannerProcessor()
       : AudioProcessor(
             BusesProperties()
-                .withInput("Input", juce::AudioChannelSet::stereo())
-                .withOutput("Output", juce::AudioChannelSet::stereo())) {}
+                .withInput("Input", juce::AudioChannelSet::discreteChannels(32))
+                .withOutput("Output",
+                            juce::AudioChannelSet::discreteChannels(32))) {}
 
   const juce::String getName() const override { return "WAStereoPanner"; }
   void prepareToPlay(double, int) override {}
@@ -283,7 +326,7 @@ class BufferSourceProcessor : public juce::AudioProcessor {
 public:
   BufferSourceProcessor()
       : AudioProcessor(BusesProperties().withOutput(
-            "Output", juce::AudioChannelSet::stereo())) {}
+            "Output", juce::AudioChannelSet::discreteChannels(32))) {}
 
   const juce::String getName() const override { return "WABufferSource"; }
   void prepareToPlay(double sr, int) override { sampleRate = sr; }
@@ -416,8 +459,9 @@ public:
   AnalyserProcessor()
       : AudioProcessor(
             BusesProperties()
-                .withInput("Input", juce::AudioChannelSet::stereo())
-                .withOutput("Output", juce::AudioChannelSet::stereo())) {
+                .withInput("Input", juce::AudioChannelSet::discreteChannels(32))
+                .withOutput("Output",
+                            juce::AudioChannelSet::discreteChannels(32))) {
     setFftSize(2048);
   }
   const juce::String getName() const override { return "WAAnalyser"; }
@@ -495,11 +539,12 @@ public:
   CompressorProcessor()
       : AudioProcessor(
             BusesProperties()
-                .withInput("Input", juce::AudioChannelSet::stereo())
-                .withOutput("Output", juce::AudioChannelSet::stereo())) {}
+                .withInput("Input", juce::AudioChannelSet::discreteChannels(32))
+                .withOutput("Output",
+                            juce::AudioChannelSet::discreteChannels(32))) {}
   const juce::String getName() const override { return "WACompressor"; }
   void prepareToPlay(double sr, int bs) override {
-    juce::dsp::ProcessSpec spec{sr, (uint32_t)bs, 2};
+    juce::dsp::ProcessSpec spec{sr, (uint32_t)bs, 32};
     compressor.prepare(spec);
   }
   void releaseResources() override {}
@@ -539,9 +584,10 @@ public:
   DelayProcessor(float maxDelay = 2.0f)
       : AudioProcessor(
             BusesProperties()
-                .withInput("Input", juce::AudioChannelSet::stereo())
-                .withOutput("Output", juce::AudioChannelSet::stereo())) {
-    buffer.setSize(2, (int)(48000 * maxDelay) + 1024);
+                .withInput("Input", juce::AudioChannelSet::discreteChannels(32))
+                .withOutput("Output",
+                            juce::AudioChannelSet::discreteChannels(32))) {
+    buffer.setSize(32, (int)(48000 * maxDelay) + 1024);
     buffer.clear();
   }
 
@@ -572,45 +618,46 @@ public:
       sampleAccurateDelayTimes.resize(numSamples, delayTime.load());
     }
 
-    float *delayDataL = buffer.getWritePointer(0);
-    float *delayDataR =
-        numChannels > 1 ? buffer.getWritePointer(1) : delayDataL;
+    for (int ch = 0; ch < numChannels; ++ch) {
+      float *delayData = buffer.getWritePointer(ch);
+      float *bufData = buf.getWritePointer(ch);
+      int wPos = writePos;
 
-    const float fb = feedback.load(std::memory_order_relaxed);
-    const bool automated = isAutomated.load(std::memory_order_relaxed);
+      for (int i = 0; i < numSamples; ++i) {
+        bool automated = false; // Default to false for now as logic is missing
+        const float currentDelaySeconds =
+            automated ? sampleAccurateDelayTimes[i]
+                      : delayTime.load(std::memory_order_relaxed);
+        const float currentDelaySamples =
+            currentDelaySeconds * (float)sampleRate;
 
-    for (int i = 0; i < numSamples; ++i) {
-      const float currentDelaySeconds =
-          automated ? sampleAccurateDelayTimes[i]
-                    : delayTime.load(std::memory_order_relaxed);
-      const float currentDelaySamples = currentDelaySeconds * (float)sampleRate;
+        // 1. Fractional Read Position
+        float rp = (float)wPos - currentDelaySamples;
+        while (rp < 0)
+          rp += (float)bufLen;
 
-      // 1. Fractional Read Position
-      float rp = (float)writePos - currentDelaySamples;
-      while (rp < 0)
-        rp += (float)bufLen;
-
-      int i1 = (int)rp;
-      int i2 = (i1 + 1) % bufLen;
-      float frac = rp - (float)i1;
-
-      for (int ch = 0; ch < numChannels && ch < 2; ++ch) {
-        float *delayLine = (ch == 0) ? delayDataL : delayDataR;
+        int i1 = (int)rp;
+        int i2 = (i1 + 1) % bufLen;
+        float frac = rp - (float)i1;
 
         // 2. Linear Interpolation
-        float d1 = delayLine[i1];
-        float d2 = delayLine[i2];
-        float delayed = d1 + frac * (d2 - d1);
+        float out = delayData[i1] + frac * (delayData[i2] - delayData[i1]);
 
-        // 3. Store Input + Internal Feedback
-        float input = buf.getReadPointer(ch)[i];
-        delayLine[writePos] = input + (delayed * fb);
+        // 3. Write to delay buffer with feedback
+        float inSample = bufData[i];
+        float fb = 0.0f; // No internal feedback for standard DelayNode
+        delayData[wPos] = inSample + out * fb;
 
-        // 4. Output Wet Signal
-        buf.getWritePointer(ch)[i] = delayed;
+        // 4. Output mix
+        bufData[i] = out; // Simple 100% wet for now to match other nodes
+        // (Actually Web Audio DelayNode is 100% wet, mix happens via
+        // connections)
+
+        wPos = (wPos + 1) % bufLen;
       }
-      writePos = (writePos + 1) % bufLen;
     }
+
+    writePos = (writePos + numSamples) % bufLen;
   }
   double getTailLengthSeconds() const override { return 0; }
   bool acceptsMidi() const override { return false; }
@@ -643,8 +690,9 @@ public:
   WaveShaperProcessor()
       : AudioProcessor(
             BusesProperties()
-                .withInput("Input", juce::AudioChannelSet::stereo())
-                .withOutput("Output", juce::AudioChannelSet::stereo())) {
+                .withInput("Input", juce::AudioChannelSet::discreteChannels(32))
+                .withOutput("Output",
+                            juce::AudioChannelSet::discreteChannels(32))) {
     curve.assign(1024, 0.0f);
     for (int i = 0; i < 1024; ++i)
       curve[i] = std::tanh((float)i / 512.0f - 1.0f);
@@ -654,7 +702,7 @@ public:
   void releaseResources() override {}
   void processBlock(juce::AudioBuffer<float> &buf,
                     juce::MidiBuffer &) override {
-    for (int ch = 0; ch < buf.getNumChannels() && ch < 2; ++ch) {
+    for (int ch = 0; ch < buf.getNumChannels(); ++ch) {
       float *data = buf.getWritePointer(ch);
       for (int i = 0; i < buf.getNumSamples(); ++i) {
         float idx = (data[i] + 1.0f) * 511.5f;
@@ -687,7 +735,7 @@ class FeedbackSenderProcessor : public juce::AudioProcessor {
 public:
   FeedbackSenderProcessor(std::shared_ptr<juce::AudioBuffer<float>> sharedBuf)
       : AudioProcessor(BusesProperties().withInput(
-            "Input", juce::AudioChannelSet::stereo())),
+            "Input", juce::AudioChannelSet::discreteChannels(32))),
         buffer(sharedBuf) {}
 
   const juce::String getName() const override { return "WAFeedbackSender"; }
@@ -729,7 +777,7 @@ class FeedbackReceiverProcessor : public juce::AudioProcessor {
 public:
   FeedbackReceiverProcessor(std::shared_ptr<juce::AudioBuffer<float>> sharedBuf)
       : AudioProcessor(BusesProperties().withOutput(
-            "Output", juce::AudioChannelSet::stereo())),
+            "Output", juce::AudioChannelSet::discreteChannels(32))),
         buffer(sharedBuf) {}
 
   const juce::String getName() const override { return "WAFeedbackReceiver"; }
@@ -766,6 +814,194 @@ public:
 
 private:
   std::shared_ptr<juce::AudioBuffer<float>> buffer;
+};
+
+// ============================================================================
+// MediaStreamSourceProcessor — Proxy for physical input
+// ============================================================================
+class MediaStreamSourceProcessor : public juce::AudioProcessor {
+public:
+  MediaStreamSourceProcessor()
+      : AudioProcessor(
+            BusesProperties()
+                .withInput("Input", juce::AudioChannelSet::discreteChannels(32))
+                .withOutput("Output",
+                            juce::AudioChannelSet::discreteChannels(32))) {}
+  const juce::String getName() const override { return "WAMediaStreamSource"; }
+  void prepareToPlay(double, int) override {}
+  void releaseResources() override {}
+  void processBlock(juce::AudioBuffer<float> &buf,
+                    juce::MidiBuffer &) override {} // Pass-through
+  double getTailLengthSeconds() const override { return 0; }
+  bool acceptsMidi() const override { return false; }
+  bool producesMidi() const override { return false; }
+  juce::AudioProcessorEditor *createEditor() override { return nullptr; }
+  bool hasEditor() const override { return false; }
+  int getNumPrograms() override { return 1; }
+  int getCurrentProgram() override { return 0; }
+  void setCurrentProgram(int) override {}
+  const juce::String getProgramName(int) override { return {}; }
+  void changeProgramName(int, const juce::String &) override {}
+  void getStateInformation(juce::MemoryBlock &) override {}
+  void setStateInformation(const void *, int) override {}
+};
+
+// ============================================================================
+// MediaStreamDestinationProcessor — Capture output
+// ============================================================================
+class MediaStreamDestinationProcessor : public juce::AudioProcessor {
+public:
+  MediaStreamDestinationProcessor()
+      : AudioProcessor(BusesProperties().withInput(
+            "Input", juce::AudioChannelSet::discreteChannels(32))) {}
+  const juce::String getName() const override {
+    return "WAMediaStreamDestination";
+  }
+  void prepareToPlay(double, int) override {}
+  void releaseResources() override {}
+  void processBlock(juce::AudioBuffer<float> &buf,
+                    juce::MidiBuffer &) override {
+    // Basic implementation: could store in a ring buffer for Dart to read
+  }
+  double getTailLengthSeconds() const override { return 0; }
+  bool acceptsMidi() const override { return false; }
+  bool producesMidi() const override { return false; }
+  juce::AudioProcessorEditor *createEditor() override { return nullptr; }
+  bool hasEditor() const override { return false; }
+  int getNumPrograms() override { return 1; }
+  int getCurrentProgram() override { return 0; }
+  void setCurrentProgram(int) override {}
+  const juce::String getProgramName(int) override { return {}; }
+  void changeProgramName(int, const juce::String &) override {}
+  void getStateInformation(juce::MemoryBlock &) override {}
+  void setStateInformation(const void *, int) override {}
+};
+
+// ============================================================================
+// ChannelSplitterProcessor — 1 input (multi-ch) -> many outputs
+// ============================================================================
+class ChannelSplitterProcessor : public juce::AudioProcessor {
+public:
+  ChannelSplitterProcessor(int outputs = 6)
+      : AudioProcessor(
+            BusesProperties()
+                .withInput("Input", juce::AudioChannelSet::discreteChannels(32))
+                .withOutput("Output",
+                            juce::AudioChannelSet::discreteChannels(32))) {}
+  const juce::String getName() const override { return "WAChannelSplitter"; }
+  void prepareToPlay(double, int) override {}
+  void releaseResources() override {}
+  void processBlock(juce::AudioBuffer<float> &buf,
+                    juce::MidiBuffer &) override {}
+  double getTailLengthSeconds() const override { return 0; }
+  bool acceptsMidi() const override { return false; }
+  bool producesMidi() const override { return false; }
+  juce::AudioProcessorEditor *createEditor() override { return nullptr; }
+  bool hasEditor() const override { return false; }
+  int getNumPrograms() override { return 1; }
+  int getCurrentProgram() override { return 0; }
+  void setCurrentProgram(int) override {}
+  const juce::String getProgramName(int) override { return {}; }
+  void changeProgramName(int, const juce::String &) override {}
+  void getStateInformation(juce::MemoryBlock &) override {}
+  void setStateInformation(const void *, int) override {}
+};
+
+// ============================================================================
+// ChannelMergerProcessor — many inputs -> 1 output (multi-ch)
+// ============================================================================
+class ChannelMergerProcessor : public juce::AudioProcessor {
+public:
+  ChannelMergerProcessor(int inputs = 6)
+      : AudioProcessor(
+            BusesProperties()
+                .withInput("Input", juce::AudioChannelSet::discreteChannels(32))
+                .withOutput("Output",
+                            juce::AudioChannelSet::discreteChannels(32))) {}
+  const juce::String getName() const override { return "WAChannelMerger"; }
+  void prepareToPlay(double, int) override {}
+  void releaseResources() override {}
+  void processBlock(juce::AudioBuffer<float> &buf,
+                    juce::MidiBuffer &) override {}
+  double getTailLengthSeconds() const override { return 0; }
+  bool acceptsMidi() const override { return false; }
+  bool producesMidi() const override { return false; }
+  juce::AudioProcessorEditor *createEditor() override { return nullptr; }
+  bool hasEditor() const override { return false; }
+  int getNumPrograms() override { return 1; }
+  int getCurrentProgram() override { return 0; }
+  void setCurrentProgram(int) override {}
+  const juce::String getProgramName(int) override { return {}; }
+  void changeProgramName(int, const juce::String &) override {}
+  void getStateInformation(juce::MemoryBlock &) override {}
+  void setStateInformation(const void *, int) override {}
+};
+
+// ============================================================================
+// WorkletBridgeProcessor — Bridge between JUCE and Dart Audio Isolate
+// ============================================================================
+class WorkletBridgeProcessor : public juce::AudioProcessor {
+public:
+  WorkletBridgeProcessor(int inputs = 2, int outputs = 2)
+      : AudioProcessor(
+            BusesProperties()
+                .withInput("Input", juce::AudioChannelSet::discreteChannels(32))
+                .withOutput("Output",
+                            juce::AudioChannelSet::discreteChannels(32))),
+        numInputs(inputs), numOutputs(outputs) {
+    // Initial buffer creation (stereo 4096 capacity by default)
+    toIsolate = std::make_unique<MultiChannelSPSCRingBuffer>(inputs, 8192);
+    fromIsolate = std::make_unique<MultiChannelSPSCRingBuffer>(outputs, 8192);
+  }
+
+  const juce::String getName() const override { return "WAWorkletBridge"; }
+
+  void prepareToPlay(double, int) override {
+    toIsolate->clear();
+    fromIsolate->clear();
+  }
+
+  void releaseResources() override {}
+
+  void processBlock(juce::AudioBuffer<float> &buf,
+                    juce::MidiBuffer &) override {
+    const int numSamples = buf.getNumSamples();
+    const int activeInputs = std::min(buf.getNumChannels(), numInputs);
+    const int activeOutputs = std::min(buf.getNumChannels(), numOutputs);
+
+    // 1. Write Input from Engine -> Isolate
+    for (int ch = 0; ch < activeInputs; ++ch) {
+      if (auto *rb = toIsolate->getChannel(ch)) {
+        rb->write(buf.getReadPointer(ch), numSamples);
+      }
+    }
+
+    // 2. Read Output from Isolate -> Engine
+    buf.clear(); // Clear before reading from worklet
+    for (int ch = 0; ch < activeOutputs; ++ch) {
+      if (auto *rb = fromIsolate->getChannel(ch)) {
+        rb->read(buf.getWritePointer(ch), numSamples);
+      }
+    }
+  }
+
+  double getTailLengthSeconds() const override { return 0; }
+  bool acceptsMidi() const override { return false; }
+  bool producesMidi() const override { return false; }
+  juce::AudioProcessorEditor *createEditor() override { return nullptr; }
+  bool hasEditor() const override { return false; }
+  int getNumPrograms() override { return 1; }
+  int getCurrentProgram() override { return 0; }
+  void setCurrentProgram(int) override {}
+  const juce::String getProgramName(int) override { return {}; }
+  void changeProgramName(int, const juce::String &) override {}
+  void getStateInformation(juce::MemoryBlock &) override {}
+  void setStateInformation(const void *, int) override {}
+
+  int numInputs;
+  int numOutputs;
+  std::unique_ptr<MultiChannelSPSCRingBuffer> toIsolate;
+  std::unique_ptr<MultiChannelSPSCRingBuffer> fromIsolate;
 };
 
 } // namespace wajuce

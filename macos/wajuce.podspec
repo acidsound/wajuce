@@ -16,14 +16,29 @@ Cross-platform audio engine using JUCE for native and Web Audio API for web.
   s.author           = { 'AcidApps' => 'dev@acidapps.io' }
 
   s.source           = { :path => '.' }
-  s.source_files     = 'Classes/WajuceJUCE.mm'
+  s.source_files     = [
+    'Classes/WajuceJUCE.mm',
+    '../native/engine/Source/WajuceEngine.cpp',
+    '../native/engine/vendor/JUCE/modules/juce_core/juce_core.mm',
+    '../native/engine/vendor/JUCE/modules/juce_events/juce_events.mm',
+    '../native/engine/vendor/JUCE/modules/juce_graphics/juce_graphics.mm',
+    '../native/engine/vendor/JUCE/modules/juce_data_structures/juce_data_structures.mm',
+    '../native/engine/vendor/JUCE/modules/juce_gui_basics/juce_gui_basics.mm',
+    '../native/engine/vendor/JUCE/modules/juce_audio_basics/juce_audio_basics.mm',
+    '../native/engine/vendor/JUCE/modules/juce_audio_devices/juce_audio_devices.mm',
+    '../native/engine/vendor/JUCE/modules/juce_audio_formats/juce_audio_formats.mm',
+    '../native/engine/vendor/JUCE/modules/juce_audio_processors/juce_audio_processors.mm',
+    '../native/engine/vendor/JUCE/modules/juce_dsp/juce_dsp.mm',
+  ]
   s.dependency 'FlutterMacOS'
 
   s.platform = :osx, '10.13'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
+    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++20',
     'GCC_PREPROCESSOR_DEFINITIONS' => [
+      'JUCE_MAC=1',
+      'JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1',
       'JUCE_DISPLAY_SPLASH_SCREEN=0',
       'JUCE_USE_DARK_SPLASH_SCREEN=0',
       'JUCE_STANDALONE_APPLICATION=0',

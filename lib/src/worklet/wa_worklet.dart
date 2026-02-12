@@ -12,9 +12,24 @@ class WAWorklet {
   final AudioIsolateManager _isolateManager = AudioIsolateManager();
   final Map<String, WAWorkletProcessor Function()> _factories = {};
   bool _isolateStarted = false;
+  final Map<int, void Function(dynamic)> _listeners = {};
 
   /// Creates a new AudioWorklet manager.
-  WAWorklet({required this.contextId, this.sampleRate = 44100});
+  WAWorklet({required this.contextId, this.sampleRate = 44100}) {
+    _isolateManager.onProcessorMessage = (nodeId, data) {
+      _listeners[nodeId]?.call(data);
+    };
+  }
+
+  /// Internal: Add a listener for a specific node.
+  void addMessageListener(int nodeId, void Function(dynamic) callback) {
+    _listeners[nodeId] = callback;
+  }
+
+  /// Internal: Remove a listener for a specific node.
+  void removeMessageListener(int nodeId) {
+    _listeners.remove(nodeId);
+  }
 
   /// Register a processor factory by name.
   ///
@@ -49,8 +64,9 @@ class WAWorklet {
 
   /// Create a node that runs a registered processor.
   int createNode(int nodeId, String processorName,
-      [Map<String, double> paramDefaults = const {}]) {
-    _isolateManager.createNode(nodeId, processorName, paramDefaults);
+      {Map<String, double> paramDefaults = const {}, int? bridgeId}) {
+    _isolateManager.createNode(nodeId, processorName,
+        paramDefaults: paramDefaults, bridgeId: bridgeId);
     return nodeId;
   }
 
@@ -62,11 +78,6 @@ class WAWorklet {
   /// Send a message to a processor.
   void postMessage(int nodeId, dynamic data) {
     _isolateManager.postMessage(nodeId, data);
-  }
-
-  /// Set callback for messages from processors.
-  set onProcessorMessage(void Function(int nodeId, dynamic data)? cb) {
-    _isolateManager.onProcessorMessage = cb;
   }
 
   /// Get the isolate manager for direct access.

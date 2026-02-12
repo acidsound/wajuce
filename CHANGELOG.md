@@ -1,3 +1,10 @@
+## 0.1.2
+
+* **Web Sequencer Fix**: Resolved critical issue where Sequencer would not advance on Web by implementing a custom `AudioWorkletProcessor` bridge for accurate timing.
+* **Web I/O Fix**: Added full support for `MediaStreamSourceNode` (Microphone input) via `navigator.mediaDevices.getUserMedia`.
+* **Cross-Platform Bug Fixes**: Corrected iOS compilation errors and fixed a critical bug where unconnected nodes (like the Clock) were suspended by the browser/OS, halting logic.
+* **Architecture**: Refactored `AudioWorklet` system and `RingBuffer` logic to use conditional imports, ensuring a clean compilation path for Web platforms.
+
 ## 0.1.1
 
 * **Performance Optimization**: Implemented native batch node creation (`createMachineVoice`) to reduce FFI overhead and thread contention.

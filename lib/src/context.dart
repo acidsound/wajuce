@@ -44,6 +44,9 @@ class WAContext {
     final destId = backend.contextGetDestinationId(_ctxId);
     _destination = WADestinationNode(nodeId: destId, contextId: _ctxId);
     _worklet = WAWorklet(contextId: _ctxId, sampleRate: sampleRate);
+    
+    // Initialize Web AudioWorklet if on Web
+    backend.webInitializeWorklet(_ctxId);
   }
 
   /// Internal constructor for subclasses (OfflineAudioContext).
@@ -51,6 +54,9 @@ class WAContext {
     _worklet = WAWorklet(contextId: _ctxId);
     final destId = backend.contextGetDestinationId(_ctxId);
     _destination = WADestinationNode(nodeId: destId, contextId: _ctxId);
+    
+    // Initialize Web AudioWorklet if on Web
+    backend.webInitializeWorklet(_ctxId);
   }
 
   /// The context ID (internal).
@@ -185,8 +191,16 @@ class WAContext {
   /// Creates a [WAMediaStreamSourceNode] from the given stream.
   /// In this implementation, the stream usually represents the default microphone.
   WAMediaStreamSourceNode createMediaStreamSource([dynamic stream]) {
-    final nodeId = backend.createMediaStreamSource(_ctxId);
+    final nodeId = backend.createMediaStreamSource(_ctxId, stream);
     return WAMediaStreamSourceNode(nodeId: nodeId, contextId: _ctxId);
+  }
+
+  /// Creates a microphone source node.
+  /// On Web, this triggers the permission prompt and gets the stream.
+  /// On Native, this opens the default input device.
+  Future<WAMediaStreamSourceNode> createMicrophoneSource() async {
+    final stream = await backend.getWebMicrophoneStream();
+    return createMediaStreamSource(stream);
   }
 
   /// Creates a [WAMediaStreamDestNode].

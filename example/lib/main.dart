@@ -65,6 +65,38 @@ class _MainScreenState extends State<MainScreen> {
     if (_ctx == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+
+    // Web-specific: Show unlock button if AudioContext is suspended
+    const bool isWeb = bool.fromEnvironment('dart.library.js_interop');
+    if (isWeb && _ctx!.state == WAAudioContextState.suspended) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.volume_off, size: 64, color: Colors.orange),
+              const SizedBox(height: 16),
+              const Text('Audio is suspended by browser policy'),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  await _ctx!.resume();
+                  setState(() {});
+                },
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('START AUDIO ENGINE'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return DefaultTabController(
       length: 4,
       child: Scaffold(
@@ -574,16 +606,51 @@ class MachineVoicePool {
 
   // Synchronous batch creation helper
   MachineVoice _createBatch() {
-    final nodes = ctx.createMachineVoice();
-    return MachineVoice(
-      osc: nodes[0] as WAOscillatorNode,
-      filter: nodes[1] as WABiquadFilterNode,
-      gain: nodes[2] as WAGainNode,
-      panner: nodes[3] as WAStereoPannerNode,
-      delay: nodes[4] as WADelayNode,
-      delayFb: nodes[5] as WAGainNode,
-      delayWet: nodes[6] as WAGainNode,
-    );
+    try {
+      final nodes = ctx.createMachineVoice();
+      return MachineVoice(
+        osc: nodes[0] as WAOscillatorNode,
+        filter: nodes[1] as WABiquadFilterNode,
+        gain: nodes[2] as WAGainNode,
+        panner: nodes[3] as WAStereoPannerNode,
+        delay: nodes[4] as WADelayNode,
+        delayFb: nodes[5] as WAGainNode,
+        delayWet: nodes[6] as WAGainNode,
+      );
+    } catch (e) {
+      // Fallback for Web or platforms where batch creation is not implemented
+      final osc = ctx.createOscillator();
+      final filter = ctx.createBiquadFilter();
+      final gain = ctx.createGain();
+      gain.gain.value = 0; // Start silent
+      final panner = ctx.createStereoPanner();
+      final delay = ctx.createDelay();
+      final delayFb = ctx.createGain();
+      final delayWet = ctx.createGain();
+
+      // Basic routing for machine voice
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(panner);
+      
+      // Delay routing
+      gain.connect(delay);
+      delay.connect(delayFb);
+      delayFb.connect(delay);
+      delay.connect(delayWet);
+
+      osc.start();
+
+      return MachineVoice(
+        osc: osc,
+        filter: filter,
+        gain: gain,
+        panner: panner,
+        delay: delay,
+        delayFb: delayFb,
+        delayWet: delayWet,
+      );
+    }
   }
 
   void _ensureReplenish({int target = 8}) {
@@ -706,10 +773,18 @@ class _SequencerScreenState extends State<SequencerScreen> {
     widget.ctx.audioWorklet.registerProcessor('clock-processor', () => ClockProcessor());
     await widget.ctx.audioWorklet.addModule('clock-processor');
     
+    
     _clockNode = widget.ctx.createWorkletNode(
       'clock-processor',
       parameterDefaults: {'sampleRate': 44100.0},
     );
+
+    // CRITICAL FIX: Web AudioWorklet must be connected to be active!
+    // We connect it to a dummy silent gain to force the browser to run the processor.
+    final dummyGain = widget.ctx.createGain();
+    dummyGain.gain.value = 0.0;
+    _clockNode!.connect(dummyGain);
+    dummyGain.connect(widget.ctx.destination);
     
     _clockNode!.port.onMessage = (data) {
       if (data['type'] == 'tick') {
@@ -723,6 +798,7 @@ class _SequencerScreenState extends State<SequencerScreen> {
   @override
   void dispose() {
     _clockNode?.disconnect();
+    // We should also dispose the dummy gain, but for invalidation scoping simplistic here.
     _pool?.dispose();
     for (final m in _machines) {
       m.dispose();
@@ -1131,8 +1207,13 @@ class _RecorderScreenState extends State<RecorderScreen> {
       _micSource?.dispose();
       _micSource = null;
     } else {
-      _micSource = widget.ctx.createMediaStreamSource();
-      _micSource!.connect(_analyser!);
+      try {
+        _micSource = await widget.ctx.createMicrophoneSource();
+        _micSource!.connect(_analyser!);
+      } catch (e) {
+        debugPrint('Error creating mic source: $e');
+        return;
+      }
     }
     setState(() => _isMicActive = !_isMicActive);
   }

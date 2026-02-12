@@ -419,7 +419,7 @@ int createBufferSource(int ctxId) => _createBufferSource(ctxId);
 int createAnalyser(int ctxId) => _createAnalyser(ctxId);
 int createStereoPanner(int ctxId) => _createStereoPanner(ctxId);
 int createWaveShaper(int ctxId) => _createWaveShaper(ctxId);
-int createMediaStreamSource(int ctxId) => _createMediaStreamSource(ctxId);
+int createMediaStreamSource(int ctxId, [dynamic stream]) => _createMediaStreamSource(ctxId);
 int createMediaStreamDestination(int ctxId) =>
     _createMediaStreamDestination(ctxId);
 
@@ -679,6 +679,12 @@ Future<WABuffer> decodeAudioData(int ctxId, Uint8List data) async {
 // ---------------------------------------------------------------------------
 // Backend API — WorkletBridge (Phase 8)
 // ---------------------------------------------------------------------------
+
+Future<Object?> getWebMicrophoneStream() async => null;
+
+Future<void> webInitializeWorklet(int ctxId) async {
+  // No-op on native
+}
 
 int createWorkletNode(int ctxId, int numInputs, int numOutputs) {
   return _createWorkletBridge(ctxId, numInputs, numOutputs);

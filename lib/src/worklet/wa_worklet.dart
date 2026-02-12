@@ -1,4 +1,5 @@
-import 'audio_isolate.dart';
+import 'audio_isolate_stub.dart'
+    if (dart.library.ffi) 'audio_isolate.dart';
 import 'wa_worklet_processor.dart';
 
 /// The AudioWorklet interface. Mirrors Web Audio API AudioWorklet.

@@ -41,7 +41,7 @@ int createBufferSource(int ctxId) => _unsupported();
 int createAnalyser(int ctxId) => _unsupported();
 int createStereoPanner(int ctxId) => _unsupported();
 int createWaveShaper(int ctxId) => _unsupported();
-int createMediaStreamSource(int ctxId) => _unsupported();
+int createMediaStreamSource(int ctxId, [dynamic stream]) => _unsupported();
 int createMediaStreamDestination(int ctxId) => _unsupported();
 int createChannelSplitter(int ctxId, int outputs) => _unsupported();
 int createChannelMerger(int ctxId, int inputs) => _unsupported();
@@ -131,8 +131,17 @@ Future<WABuffer> decodeAudioData(int ctxId, Uint8List data) => _unsupported();
 // WorkletBridge (Phase 8)
 // ---------------------------------------------------------------------------
 
+Future<Object?> getWebMicrophoneStream() async => null;
+
+Future<void> webInitializeWorklet(int ctxId) async {}
+
 int createWorkletNode(int ctxId, int numInputs, int numOutputs) =>
     _unsupported();
+
+int workletGetCapacity(int bridgeId) => _unsupported();
+int workletGetBufferPtr(int bridgeId, int type, int channel) => _unsupported();
+int workletGetReadPosPtr(int bridgeId, int type, int channel) => _unsupported();
+int workletGetWritePosPtr(int bridgeId, int type, int channel) => _unsupported();
 
 // ---------------------------------------------------------------------------
 // MIDI

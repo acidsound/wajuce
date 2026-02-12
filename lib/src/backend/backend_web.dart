@@ -12,9 +12,6 @@ import 'dart:typed_data';
 
 import '../audio_buffer.dart';
 
-Never _unsupported() =>
-    throw UnsupportedError('Operation not supported on Web backend');
-
 // ---------------------------------------------------------------------------
 // JS Interop extension types for Web Audio API
 // ---------------------------------------------------------------------------
@@ -28,112 +25,29 @@ extension type JSAudioContext._(JSObject _) implements JSObject {
   external JSPromise resume();
   external JSPromise suspend();
   external JSPromise close();
-  external JSAudioDestinationNode get destination;
-  external JSGainNode createGain();
-  external JSOscillatorNode createOscillator();
-  external JSBiquadFilterNode createBiquadFilter();
-  external JSDynamicsCompressorNode createDynamicsCompressor();
-  external JSDelayNode createDelay([JSNumber? maxDelayTime]);
-  external JSAudioBufferSourceNode createBufferSource();
-  external JSAnalyserNode createAnalyser();
-  external JSStereoPannerNode createStereoPanner();
-  external JSWaveShaperNode createWaveShaper();
+  external JSObject get destination;
+  external JSObject createGain();
+  external JSObject createOscillator();
+  external JSObject createBiquadFilter();
+  external JSObject createDynamicsCompressor();
+  external JSObject createDelay([JSNumber? maxDelayTime]);
+  external JSObject createBufferSource();
+  external JSObject createAnalyser();
+  external JSObject createStereoPanner();
+  external JSObject createWaveShaper();
+  external JSObject createChannelSplitter([JSNumber? numberOfOutputs]);
+  external JSObject createChannelMerger([JSNumber? numberOfInputs]);
   external JSAudioBuffer createBuffer(
       JSNumber numberOfChannels, JSNumber length, JSNumber sampleRate);
+  external JSPeriodicWave createPeriodicWave(
+      JSFloat32Array real, JSFloat32Array imag, [JSObject? options]);
   external JSPromise decodeAudioData(JSArrayBuffer audioData);
+  external JSObject createMediaStreamSource(JSObject stream);
+  external JSObject createScriptProcessor([JSNumber? bufferSize, JSNumber? numberOfInputChannels, JSNumber? numberOfOutputChannels]);
 }
 
-@JS('AudioDestinationNode')
-extension type JSAudioDestinationNode._(JSObject _) implements JSObject {
-  external void connect(JSObject destination);
-  external void disconnect([JSObject? destination]);
-}
-
-@JS('GainNode')
-extension type JSGainNode._(JSObject _) implements JSObject {
-  external JSAudioParam get gain;
-  external void connect(JSObject destination);
-  external void disconnect([JSObject? destination]);
-}
-
-@JS('OscillatorNode')
-extension type JSOscillatorNode._(JSObject _) implements JSObject {
-  external JSAudioParam get frequency;
-  external JSAudioParam get detune;
-  external set type(JSString value);
-  external void start([JSNumber? when]);
-  external void stop([JSNumber? when]);
-  external void connect(JSObject destination);
-  external void disconnect([JSObject? destination]);
-}
-
-@JS('BiquadFilterNode')
-extension type JSBiquadFilterNode._(JSObject _) implements JSObject {
-  external JSAudioParam get frequency;
-  external JSAudioParam get Q;
-  external JSAudioParam get gain;
-  external JSAudioParam get detune;
-  external set type(JSString value);
-  external void connect(JSObject destination);
-  external void disconnect([JSObject? destination]);
-}
-
-@JS('DynamicsCompressorNode')
-extension type JSDynamicsCompressorNode._(JSObject _) implements JSObject {
-  external JSAudioParam get threshold;
-  external JSAudioParam get knee;
-  external JSAudioParam get ratio;
-  external JSAudioParam get attack;
-  external JSAudioParam get release;
-  external void connect(JSObject destination);
-  external void disconnect([JSObject? destination]);
-}
-
-@JS('DelayNode')
-extension type JSDelayNode._(JSObject _) implements JSObject {
-  external JSAudioParam get delayTime;
-  external void connect(JSObject destination);
-  external void disconnect([JSObject? destination]);
-}
-
-@JS('AudioBufferSourceNode')
-extension type JSAudioBufferSourceNode._(JSObject _) implements JSObject {
-  external JSAudioParam get playbackRate;
-  external JSAudioParam get detune;
-  external set buffer(JSAudioBuffer? buf);
-  external set loop(JSBoolean value);
-  external void start([JSNumber? when]);
-  external void stop([JSNumber? when]);
-  external void connect(JSObject destination);
-  external void disconnect([JSObject? destination]);
-}
-
-@JS('AnalyserNode')
-extension type JSAnalyserNode._(JSObject _) implements JSObject {
-  external set fftSize(JSNumber value);
-  external JSNumber get frequencyBinCount;
-  external void getByteFrequencyData(JSUint8Array array);
-  external void getByteTimeDomainData(JSUint8Array array);
-  external void getFloatFrequencyData(JSFloat32Array array);
-  external void getFloatTimeDomainData(JSFloat32Array array);
-  external void connect(JSObject destination);
-  external void disconnect([JSObject? destination]);
-}
-
-@JS('StereoPannerNode')
-extension type JSStereoPannerNode._(JSObject _) implements JSObject {
-  external JSAudioParam get pan;
-  external void connect(JSObject destination);
-  external void disconnect([JSObject? destination]);
-}
-
-@JS('WaveShaperNode')
-extension type JSWaveShaperNode._(JSObject _) implements JSObject {
-  external set curve(JSFloat32Array? value);
-  external set oversample(JSString value);
-  external void connect(JSObject destination);
-  external void disconnect([JSObject? destination]);
-}
+@JS('PeriodicWave')
+extension type JSPeriodicWave._(JSObject _) implements JSObject {}
 
 @JS('AudioParam')
 extension type JSAudioParam._(JSObject _) implements JSObject {
@@ -170,7 +84,6 @@ final Map<int, JSAudioContext> _contexts = {};
 JSAudioParam? _getParam(int nodeId, String paramName) {
   final node = _nodes[nodeId];
   if (node == null) return null;
-  // Use getProperty for dynamic access
   try {
     return node.getProperty(paramName.toJS) as JSAudioParam;
   } catch (_) {
@@ -187,8 +100,7 @@ int contextCreate(int sampleRate, int bufferSize,
   final ctx = JSAudioContext();
   final id = _nextId++;
   _contexts[id] = ctx;
-  // Destination node is always ID 0
-  _nodes[0] = ctx.destination as JSObject;
+  _nodes[0] = ctx.destination;
   return id;
 }
 
@@ -241,102 +153,271 @@ int contextGetDestinationId(int ctxId) => 0;
 // ---------------------------------------------------------------------------
 
 int createGain(int ctxId) {
-  final ctx = _contexts[ctxId]!;
-  final node = ctx.createGain();
+  final node = _contexts[ctxId]!.createGain();
   final id = _nextId++;
-  _nodes[id] = node as JSObject;
+  _nodes[id] = node;
   return id;
 }
 
 int createOscillator(int ctxId) {
-  final ctx = _contexts[ctxId]!;
-  final node = ctx.createOscillator();
+  final node = _contexts[ctxId]!.createOscillator();
   final id = _nextId++;
-  _nodes[id] = node as JSObject;
+  _nodes[id] = node;
   return id;
 }
 
 int createBiquadFilter(int ctxId) {
-  final ctx = _contexts[ctxId]!;
-  final node = ctx.createBiquadFilter();
+  final node = _contexts[ctxId]!.createBiquadFilter();
   final id = _nextId++;
-  _nodes[id] = node as JSObject;
+  _nodes[id] = node;
   return id;
 }
 
 int createCompressor(int ctxId) {
-  final ctx = _contexts[ctxId]!;
-  final node = ctx.createDynamicsCompressor();
+  final node = _contexts[ctxId]!.createDynamicsCompressor();
   final id = _nextId++;
-  _nodes[id] = node as JSObject;
+  _nodes[id] = node;
   return id;
 }
 
 int createDelay(int ctxId, double maxDelay) {
-  final ctx = _contexts[ctxId]!;
-  final node = ctx.createDelay(maxDelay.toJS);
+  final node = _contexts[ctxId]!.createDelay(maxDelay.toJS);
   final id = _nextId++;
-  _nodes[id] = node as JSObject;
+  _nodes[id] = node;
   return id;
 }
 
 int createBufferSource(int ctxId) {
-  final ctx = _contexts[ctxId]!;
-  final node = ctx.createBufferSource();
+  final node = _contexts[ctxId]!.createBufferSource();
   final id = _nextId++;
-  _nodes[id] = node as JSObject;
+  _nodes[id] = node;
   return id;
 }
 
 int createAnalyser(int ctxId) {
-  final ctx = _contexts[ctxId]!;
-  final node = ctx.createAnalyser();
+  final node = _contexts[ctxId]!.createAnalyser();
   final id = _nextId++;
-  _nodes[id] = node as JSObject;
+  _nodes[id] = node;
   return id;
 }
 
 int createStereoPanner(int ctxId) {
-  final ctx = _contexts[ctxId]!;
-  final node = ctx.createStereoPanner();
+  final node = _contexts[ctxId]!.createStereoPanner();
   final id = _nextId++;
-  _nodes[id] = node as JSObject;
+  _nodes[id] = node;
   return id;
-}
-
-int createMediaStreamDestination(int ctxId) =>
-    throw UnimplementedError('createMediaStreamDestination not supported on Web');
-
-List<int> createMachineVoice(int ctxId) {
-  throw UnimplementedError('createMachineVoice is a native optimization only');
 }
 
 int createWaveShaper(int ctxId) {
-  final ctx = _contexts[ctxId]!;
-  final node = ctx.createWaveShaper();
+  final node = _contexts[ctxId]!.createWaveShaper();
   final id = _nextId++;
-  _nodes[id] = node as JSObject;
+  _nodes[id] = node;
   return id;
 }
 
-int createMediaStreamSource(int ctxId) {
-  // On Web, this would normally take a stream. 
-  // For standardizing with Native, we might need a different approach 
-  // if we want to support dynamic stream input.
-  throw UnimplementedError('createMediaStreamSource on Web needs MediaStream input');
-}
-
 int createChannelSplitter(int ctxId, int outputs) {
-  // final ctx = _contexts[ctxId]!;
-  return _unsupported();
+  final node = _contexts[ctxId]!.createChannelSplitter(outputs.toJS);
+  final id = _nextId++;
+  _nodes[id] = node;
+  return id;
 }
 
 int createChannelMerger(int ctxId, int inputs) {
-  return _unsupported();
+  final node = _contexts[ctxId]!.createChannelMerger(inputs.toJS);
+  final id = _nextId++;
+  _nodes[id] = node;
+  return id;
 }
 
-void oscSetPeriodicWave(int nodeId, Float32List real, Float32List imag, int len) {
-  // Needs JSOscillatorNode.setPeriodicWave
+int createMediaStreamSource(int ctxId, [dynamic stream]) {
+  if (stream == null) {
+      throw UnimplementedError('MediaStreamSource on Web needs explicit stream object');
+  }
+  final node = _contexts[ctxId]!.createMediaStreamSource(stream as JSObject);
+  final id = _nextId++;
+  _nodes[id] = node;
+  return id;
+}
+
+int createMediaStreamDestination(int ctxId) {
+  final ctx = _contexts[ctxId]!;
+  final node = ctx.callMethod('createMediaStreamDestination'.toJS) as JSObject;
+  final id = _nextId++;
+  _nodes[id] = node;
+  return id;
+}
+
+
+// ---------------------------------------------------------------------------
+// Worklet & I/O
+// ---------------------------------------------------------------------------
+
+/// The minimal JS AudioWorkletProcessor code to drive the Dart side.
+/// This acts as a reliable clock source from the Audio Thread.
+const _kWorkletModuleSource = r'''
+class WajuceProxyProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this._frameCounter = 0;
+  }
+
+  process(inputs, outputs, parameters) {
+    // Notify Dart main thread every 128 frames (1 block)
+    // We strictly use the Audio Thread clock here.
+    this.port.postMessage({
+      'type': 'process',
+      'frameCount': 128
+    });
+    
+    // Pass audio through if inputs connected (basic passthrough for now)
+    // Real DSP happens in the Dart callback triggered by the message, 
+    // but actual audio manipulation on Web would require WASM for performance.
+    // For the Sequencer Clock, this 'tick' is what matters.
+    const input = inputs[0];
+    const output = outputs[0];
+    if (input && output && input.length > 0) {
+      for (let channel = 0; channel < output.length; channel++) {
+         if (input[channel]) {
+            output[channel].set(input[channel]);
+         }
+      }
+    }
+    
+    return true;
+  }
+}
+registerProcessor('wajuce-proxy-processor', WajuceProxyProcessor);
+''';
+
+bool _moduleLoaded = false;
+
+Future<void> _ensureWorkletModuleLoaded(int ctxId) async {
+  if (_moduleLoaded) return;
+  final ctx = _contexts[ctxId];
+  if (ctx == null) return;
+
+  // Create a Blob from the source string
+  final blob = JSBlob(
+    [_kWorkletModuleSource.toJS].toJS,
+    JSBlobPropertyBag(type: 'application/javascript'.toJS),
+  );
+  
+  final worklet = ctx.audioWorklet;
+  if (worklet != null) {
+      final url = createObjectURL(blob);
+      await worklet.addModule(url).toDart;
+      _moduleLoaded = true;
+  }
+}
+
+// Callback interface for Dart side
+void Function(int nodeId)? onWebProcessQuantum;
+
+int createWorkletNode(int ctxId, int numInputs, int numOutputs) {
+  // We cannot block here to wait for addModule (async), 
+  // so we assume it's called during initialization or we handle the promise externally.
+  // However, for strict compatibility, we should ensure the module is loaded.
+  // In this synchronous C-API style method, we'll create the node. 
+  // Warning: addModule MUST be called before this.
+  
+  final ctx = _contexts[ctxId]!;
+  final node = JSAudioWorkletNode(ctx, 'wajuce-proxy-processor'.toJS);
+  
+  final id = _nextId++;
+  _nodes[id] = node;
+
+  // Listen to the 'tick' from the AudioWorkletProcessor
+  node.port.setProperty('onmessage'.toJS, (JSObject event) {
+      // Treat this as the processing tick
+      onWebProcessQuantum?.call(id);
+  }.toJS);
+
+  return id;
+}
+
+/// Helper for initializing the worklet module from Dart
+Future<void> webInitializeWorklet(int ctxId) async {
+  await _ensureWorkletModuleLoaded(ctxId);
+}
+
+int workletGetCapacity(int bridgeId) => 0; // Not used on Web
+int workletGetBufferPtr(int bridgeId, int type, int channel) => 0; 
+int workletGetReadPosPtr(int bridgeId, int type, int channel) => 0;
+int workletGetWritePosPtr(int bridgeId, int type, int channel) => 0;
+
+List<int> createMachineVoice(int ctxId) {
+  // Fallback for Web: create individual nodes (Dart side handles connection)
+  // We return a list of NEGATIVE IDs or standard IDs to indicate
+  // that the caller should manually route them.
+  // Actually, the caller (backend wrapper or main) handles the fallback exception.
+  throw UnimplementedError('createMachineVoice native optimization not supported on Web');
+}
+
+// ---------------------------------------------------------------------------
+// JS Interop definitions for Worklet
+// ---------------------------------------------------------------------------
+
+@JS()
+external JSObject get URL;
+
+@JS('URL.createObjectURL')
+// ignore: non_constant_identifier_names
+external JSString createObjectURL(JSBlob blob);
+
+@JS('Blob')
+extension type JSBlob._(JSObject _) implements JSObject {
+  external JSBlob(JSArray blobParts, [JSBlobPropertyBag options]);
+}
+
+@JS()
+@anonymous
+extension type JSBlobPropertyBag._(JSObject _) implements JSObject {
+  external factory JSBlobPropertyBag({JSString type});
+}
+
+@JS('AudioWorklet')
+extension type JSAudioWorklet._(JSObject _) implements JSObject {
+  external JSPromise addModule(JSString moduleURL);
+}
+
+@JS('AudioWorkletNode')
+extension type JSAudioWorkletNode._(JSObject _) implements JSObject {
+  external JSAudioWorkletNode(JSAudioContext context, JSString name);
+  external JSAudioParam get parameters;
+  external JSObject get port; // MessagePort
+}
+
+extension JSAudioContextExtension on JSAudioContext {
+  external JSAudioWorklet? get audioWorklet;
+}
+
+// ---------------------------------------------------------------------------
+// MediaDevices Interop
+// ---------------------------------------------------------------------------
+
+@JS('navigator.mediaDevices')
+external JSMediaDevices? get mediaDevices;
+
+@JS('MediaDevices')
+extension type JSMediaDevices._(JSObject _) implements JSObject {
+  external JSPromise getUserMedia([JSObject? constraints]);
+}
+
+Future<JSObject?> getWebMicrophoneStream() async {
+  if (mediaDevices == null) return null;
+  try {
+     // Request audio only
+     final constraints = JSObject();
+     constraints.setProperty('audio'.toJS, true.toJS);
+     constraints.setProperty('video'.toJS, false.toJS);
+     
+     final promise = mediaDevices!.getUserMedia(constraints);
+     final stream = await promise.toDart;
+     return stream as JSObject;
+  } catch (e) {
+    // print('Error getting user media: $e');
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -347,8 +428,7 @@ void connect(int ctxId, int srcId, int dstId, int output, int input) {
   final src = _nodes[srcId];
   final dst = _nodes[dstId];
   if (src == null || dst == null) return;
-  // Use callMethod for connect
-  src.callMethod('connect'.toJS, dst);
+  src.callMethod('connect'.toJS, dst, output.toJS, input.toJS);
 }
 
 void disconnect(int ctxId, int srcId, int dstId) {
@@ -363,12 +443,12 @@ void disconnect(int ctxId, int srcId, int dstId) {
 }
 
 void disconnectAll(int ctxId, int srcId) {
-  // handled by GC usually, but could call disconnect()
+  _nodes[srcId]?.callMethod('disconnect'.toJS);
 }
 
 void removeNode(int ctxId, int nodeId) {
-  // Web Audio doesn't have explicit node disposal, just disconnect and let GC handle it.
   disconnectAll(ctxId, nodeId);
+  _nodes.remove(nodeId);
 }
 
 // ---------------------------------------------------------------------------
@@ -414,20 +494,27 @@ void paramCancel(int nodeId, String paramName, double cancelTime) {
 const _oscTypes = ['sine', 'square', 'sawtooth', 'triangle', 'custom'];
 
 void oscSetType(int nodeId, int type) {
-  final node = _nodes[nodeId] as JSOscillatorNode?;
+  final node = _nodes[nodeId];
   if (node != null && type < _oscTypes.length) {
-    node.type = _oscTypes[type].toJS;
+    node.setProperty('type'.toJS, _oscTypes[type].toJS);
   }
 }
 
 void oscStart(int nodeId, double when) {
-  final node = _nodes[nodeId] as JSOscillatorNode?;
-  node?.start(when.toJS);
+  _nodes[nodeId]?.callMethod('start'.toJS, when.toJS);
 }
 
 void oscStop(int nodeId, double when) {
-  final node = _nodes[nodeId] as JSOscillatorNode?;
-  node?.stop(when.toJS);
+  _nodes[nodeId]?.callMethod('stop'.toJS, when.toJS);
+}
+
+void oscSetPeriodicWave(int nodeId, Float32List real, Float32List imag, int len) {
+  final node = _nodes[nodeId];
+  if (node == null) return;
+  // Use first context as default
+  final ctx = _contexts.values.first;
+  final wave = ctx.createPeriodicWave(real.toJS, imag.toJS);
+  node.callMethod('setPeriodicWave'.toJS, wave);
 }
 
 // ---------------------------------------------------------------------------
@@ -435,20 +522,13 @@ void oscStop(int nodeId, double when) {
 // ---------------------------------------------------------------------------
 
 const _filterTypes = [
-  'lowpass',
-  'highpass',
-  'bandpass',
-  'lowshelf',
-  'highshelf',
-  'peaking',
-  'notch',
-  'allpass',
+  'lowpass', 'highpass', 'bandpass', 'lowshelf', 'highshelf', 'peaking', 'notch', 'allpass',
 ];
 
 void filterSetType(int nodeId, int type) {
-  final node = _nodes[nodeId] as JSBiquadFilterNode?;
+  final node = _nodes[nodeId];
   if (node != null && type < _filterTypes.length) {
-    node.type = _filterTypes[type].toJS;
+    node.setProperty('type'.toJS, _filterTypes[type].toJS);
   }
 }
 
@@ -457,10 +537,9 @@ void filterSetType(int nodeId, int type) {
 // ---------------------------------------------------------------------------
 
 void bufferSourceSetBuffer(int nodeId, WABuffer buffer) {
-  final node = _nodes[nodeId] as JSAudioBufferSourceNode?;
+  final node = _nodes[nodeId];
   if (node == null) return;
 
-  // Find the AudioContext (first one)
   final ctx = _contexts.values.first;
   final jsBuf = ctx.createBuffer(
     buffer.numberOfChannels.toJS,
@@ -471,22 +550,19 @@ void bufferSourceSetBuffer(int nodeId, WABuffer buffer) {
     final data = buffer.getChannelData(ch);
     jsBuf.copyToChannel(data.toJS, ch.toJS);
   }
-  node.buffer = jsBuf;
+  node.setProperty('buffer'.toJS, jsBuf);
 }
 
 void bufferSourceStart(int nodeId, [double when = 0]) {
-  final node = _nodes[nodeId] as JSAudioBufferSourceNode?;
-  node?.start(when.toJS);
+  _nodes[nodeId]?.callMethod('start'.toJS, when.toJS);
 }
 
 void bufferSourceStop(int nodeId, [double when = 0]) {
-  final node = _nodes[nodeId] as JSAudioBufferSourceNode?;
-  node?.stop(when.toJS);
+  _nodes[nodeId]?.callMethod('stop'.toJS, when.toJS);
 }
 
 void bufferSourceSetLoop(int nodeId, bool loop) {
-  final node = _nodes[nodeId] as JSAudioBufferSourceNode?;
-  node?.loop = loop.toJS;
+  _nodes[nodeId]?.setProperty('loop'.toJS, loop.toJS);
 }
 
 // ---------------------------------------------------------------------------
@@ -494,39 +570,38 @@ void bufferSourceSetLoop(int nodeId, bool loop) {
 // ---------------------------------------------------------------------------
 
 void analyserSetFftSize(int nodeId, int size) {
-  final node = _nodes[nodeId] as JSAnalyserNode?;
-  node?.fftSize = size.toJS;
+  _nodes[nodeId]?.setProperty('fftSize'.toJS, size.toJS);
 }
 
 Uint8List analyserGetByteFrequencyData(int nodeId, int len) {
-  final node = _nodes[nodeId] as JSAnalyserNode?;
+  final node = _nodes[nodeId];
   if (node == null) return Uint8List(len);
   final arr = Uint8List(len);
-  node.getByteFrequencyData(arr.toJS);
+  node.callMethod('getByteFrequencyData'.toJS, arr.toJS);
   return arr;
 }
 
 Uint8List analyserGetByteTimeDomainData(int nodeId, int len) {
-  final node = _nodes[nodeId] as JSAnalyserNode?;
+  final node = _nodes[nodeId];
   if (node == null) return Uint8List(len);
   final arr = Uint8List(len);
-  node.getByteTimeDomainData(arr.toJS);
+  node.callMethod('getByteTimeDomainData'.toJS, arr.toJS);
   return arr;
 }
 
 Float32List analyserGetFloatFrequencyData(int nodeId, int len) {
-  final node = _nodes[nodeId] as JSAnalyserNode?;
+  final node = _nodes[nodeId];
   if (node == null) return Float32List(len);
   final arr = Float32List(len);
-  node.getFloatFrequencyData(arr.toJS);
+  node.callMethod('getFloatFrequencyData'.toJS, arr.toJS);
   return arr;
 }
 
 Float32List analyserGetFloatTimeDomainData(int nodeId, int len) {
-  final node = _nodes[nodeId] as JSAnalyserNode?;
+  final node = _nodes[nodeId];
   if (node == null) return Float32List(len);
   final arr = Float32List(len);
-  node.getFloatTimeDomainData(arr.toJS);
+  node.callMethod('getFloatTimeDomainData'.toJS, arr.toJS);
   return arr;
 }
 
@@ -535,16 +610,15 @@ Float32List analyserGetFloatTimeDomainData(int nodeId, int len) {
 // ---------------------------------------------------------------------------
 
 void waveShaperSetCurve(int nodeId, Float32List curve) {
-  final node = _nodes[nodeId] as JSWaveShaperNode?;
-  node?.curve = curve.toJS;
+  _nodes[nodeId]?.setProperty('curve'.toJS, curve.toJS);
 }
 
 const _oversampleTypes = ['none', '2x', '4x'];
 
 void waveShaperSetOversample(int nodeId, int type) {
-  final node = _nodes[nodeId] as JSWaveShaperNode?;
+  final node = _nodes[nodeId];
   if (node != null && type < _oversampleTypes.length) {
-    node.oversample = _oversampleTypes[type].toJS;
+    node.setProperty('oversample'.toJS, _oversampleTypes[type].toJS);
   }
 }
 
@@ -588,16 +662,9 @@ Future<WABuffer> decodeAudioData(int ctxId, Uint8List data) async {
 }
 
 // ---------------------------------------------------------------------------
-// Backend API — WorkletBridge (Phase 8)
-// ---------------------------------------------------------------------------
-
-int createWorkletNode(int ctxId, int numInputs, int numOutputs) => -1;
-
-// ---------------------------------------------------------------------------
 // Backend API — MIDI (Web MIDI API)
 // ---------------------------------------------------------------------------
 
-/// MIDI device info container for backend.
 class MidiDeviceInfoBackend {
   final int inputCount;
   final int outputCount;
@@ -638,12 +705,9 @@ Future<bool> midiRequestAccess({bool sysex = false}) async {
 Future<MidiDeviceInfoBackend> midiGetDevices() async {
   if (_midiAccess == null) {
     return MidiDeviceInfoBackend(
-      inputCount: 0,
-      outputCount: 0,
-      inputNames: [],
-      outputNames: [],
-      inputManufacturers: [],
-      outputManufacturers: [],
+      inputCount: 0, outputCount: 0,
+      inputNames: [], outputNames: [],
+      inputManufacturers: [], outputManufacturers: [],
     );
   }
 
@@ -652,32 +716,24 @@ Future<MidiDeviceInfoBackend> midiGetDevices() async {
   final inputManufacturers = <String>[];
   final outputManufacturers = <String>[];
 
-  // Iterate MIDI inputs
   final inputs = _midiAccess!.getProperty('inputs'.toJS) as JSObject;
   final inputIterator = inputs.callMethod('values'.toJS) as JSObject;
   while (true) {
     final result = inputIterator.callMethod('next'.toJS) as JSObject;
-    final done = (result.getProperty('done'.toJS) as JSBoolean).toDart;
-    if (done) break;
+    if ((result.getProperty('done'.toJS) as JSBoolean).toDart) break;
     final port = result.getProperty('value'.toJS) as JSObject;
-    inputNames
-        .add((port.getProperty('name'.toJS) as JSString?)?.toDart ?? 'Unknown');
-    inputManufacturers.add(
-        (port.getProperty('manufacturer'.toJS) as JSString?)?.toDart ?? '');
+    inputNames.add((port.getProperty('name'.toJS) as JSString?)?.toDart ?? 'Unknown');
+    inputManufacturers.add((port.getProperty('manufacturer'.toJS) as JSString?)?.toDart ?? '');
   }
 
-  // Iterate MIDI outputs
   final outputs = _midiAccess!.getProperty('outputs'.toJS) as JSObject;
   final outputIterator = outputs.callMethod('values'.toJS) as JSObject;
   while (true) {
     final result = outputIterator.callMethod('next'.toJS) as JSObject;
-    final done = (result.getProperty('done'.toJS) as JSBoolean).toDart;
-    if (done) break;
+    if ((result.getProperty('done'.toJS) as JSBoolean).toDart) break;
     final port = result.getProperty('value'.toJS) as JSObject;
-    outputNames
-        .add((port.getProperty('name'.toJS) as JSString?)?.toDart ?? 'Unknown');
-    outputManufacturers.add(
-        (port.getProperty('manufacturer'.toJS) as JSString?)?.toDart ?? '');
+    outputNames.add((port.getProperty('name'.toJS) as JSString?)?.toDart ?? 'Unknown');
+    outputManufacturers.add((port.getProperty('manufacturer'.toJS) as JSString?)?.toDart ?? '');
   }
 
   return MidiDeviceInfoBackend(
@@ -695,17 +751,13 @@ final Map<int, JSObject> _midiOutputPorts = {};
 
 JSObject? _getMidiPort(bool isInput, int index) {
   if (_midiAccess == null) return null;
-  final mapName = isInput ? 'inputs' : 'outputs';
-  final map = _midiAccess!.getProperty(mapName.toJS) as JSObject;
+  final map = _midiAccess!.getProperty((isInput ? 'inputs' : 'outputs').toJS) as JSObject;
   final iterator = map.callMethod('values'.toJS) as JSObject;
   int i = 0;
   while (true) {
     final result = iterator.callMethod('next'.toJS) as JSObject;
-    final done = (result.getProperty('done'.toJS) as JSBoolean).toDart;
-    if (done) return null;
-    if (i == index) {
-      return result.getProperty('value'.toJS) as JSObject;
-    }
+    if ((result.getProperty('done'.toJS) as JSBoolean).toDart) return null;
+    if (i == index) return result.getProperty('value'.toJS) as JSObject;
     i++;
   }
 }
@@ -719,8 +771,7 @@ void midiInputOpen(int portIndex) {
 }
 
 void midiInputClose(int portIndex) {
-  final port = _midiInputPorts.remove(portIndex);
-  port?.callMethod('close'.toJS);
+  _midiInputPorts.remove(portIndex)?.callMethod('close'.toJS);
 }
 
 void midiOutputOpen(int portIndex) {
@@ -732,18 +783,16 @@ void midiOutputOpen(int portIndex) {
 }
 
 void midiOutputClose(int portIndex) {
-  final port = _midiOutputPorts.remove(portIndex);
-  port?.callMethod('close'.toJS);
+  _midiOutputPorts.remove(portIndex)?.callMethod('close'.toJS);
 }
 
 void midiOutputSend(int portIndex, Uint8List data, double timestamp) {
   final port = _midiOutputPorts[portIndex];
   if (port == null) return;
-  final jsData = data.toJS;
   if (timestamp > 0) {
-    port.callMethod('send'.toJS, jsData, timestamp.toJS);
+    port.callMethod('send'.toJS, data.toJS, timestamp.toJS);
   } else {
-    port.callMethod('send'.toJS, jsData);
+    port.callMethod('send'.toJS, data.toJS);
   }
 }
 

@@ -1,4 +1,4 @@
-## 0.1.2
+## 0.1.3
 
 * **Maintenance**: Improved pub.dev score by resolving all library and example analysis issues.
 * **Package Hygiene**: Optimized package size and scoring by excluding unnecessary JUCE vendor assets via `.pubignore`.

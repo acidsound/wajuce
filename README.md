@@ -47,17 +47,26 @@ graph TD
 
 ---
 
-## 🚀 Current Implementation Status (2026-02-11)
+## 🚀 Current Implementation Status (2026-02-12)
 
 | Feature Group | Status | Component Coverage |
 | :--- | :---: | :--- |
 | **Context & Graph** | ✅ Done | `WAContext`, `WAOfflineContext`, `connect/disconnect` |
+| **Multi-Channel** | ✅ Done | Support up to 32 channels, `ChannelSplitter`, `ChannelMerger` |
 | **Core Nodes** | ✅ Done | `Oscillator`, `Gain`, `BiquadFilter`, `Compressor`, `Delay`, `Analyser`, `StereoPanner`, `WaveShaper`, `BufferSource` |
 | **AudioParam** | ✅ Done | Full automation (12 methods including `exponentialRampToValueAtTime`) |
-| **MIDI API** | ⚠️ Partial | Dart API done; Native JUCE implementation pending |
-| **AudioWorklet** | ⚠️ Partial | Isolate system done; High-performance Native sync pending |
+| **MIDI API** | ✅ Done | Hardware I/O, device enumeration, SysEx support |
+| **AudioWorklet** | ✅ Done | High-priority Isolate + Lock-free Native Ring Buffer Bridge |
 | **Web Backend** | ✅ Done | Native passthrough via `js_interop` |
-| **Build System** | ⚠️ Testing | Dual-mode CMake (JUCE/Stub) ready; Native builds in progress |
+| **Build System** | ✅ Done | iOS, Android, macOS, Windows (CMake-ready) |
+
+---
+
+## ⚡ v0.1.1 Performance & Scalability
+The 0.1.1 release introduces significant optimizations for complex node graphs:
+- **Native Batch Creation**: Create complex voices (15+ nodes) in a single FFI call, preventing audio thread contention.
+- **Lazy Connection**: Voices in the `MachineVoicePool` are kept disconnected until playback, saving substantial CPU.
+- **Async Voice Pooling**: Background replenishment of voice pools to ensure glitch-free sequencer tracking.
 
 ---
 

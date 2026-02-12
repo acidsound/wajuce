@@ -1,5 +1,4 @@
 import 'audio_node.dart';
-import '../backend/backend.dart' as backend;
 
 /// Represents an audio source from a media stream (e.g., microphone).
 /// Mirrors Web Audio API MediaStreamAudioSourceNode.

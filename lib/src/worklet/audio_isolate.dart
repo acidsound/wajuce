@@ -14,9 +14,6 @@ import 'dart:typed_data';
 
 import 'wa_worklet_processor.dart';
 import 'ring_buffer.dart';
-import '../backend/backend_juce.dart' as backend;
-import 'dart:ffi' as ffi;
-import 'dart:math' as math;
 
 const int quantumSize = 128;
 
@@ -278,7 +275,9 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
         config.mainSendPort.send(ProcessedQuantumMessage(message.nodeId, outputs[0]));
       }
     } else if (message is StopIsolateMessage) {
-      for (final proc in activeNodes.values) proc.dispose();
+      for (final proc in activeNodes.values) {
+        proc.dispose();
+      }
       activeNodes.clear();
       bridgedNodes.clear();
       receivePort.close();

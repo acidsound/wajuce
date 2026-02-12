@@ -1,8 +1,6 @@
 import 'audio_node.dart';
 import '../audio_param.dart';
 import '../enums.dart';
-import 'dart:ffi' as ffi;
-import 'package:ffi/ffi.dart' as ffi;
 import 'periodic_wave.dart';
 import '../backend/backend.dart' as backend;
 
@@ -71,19 +69,6 @@ class WAOscillatorNode extends WANode {
       throw ArgumentError('Real and Imag arrays must have same length');
     }
 
-    ffi.Arena arena = ffi.Arena();
-    try {
-      final pReal = arena<ffi.Float>(len);
-      final pImag = arena<ffi.Float>(len);
-      
-      for(int i=0; i<len; ++i) {
-        pReal[i] = periodicWave.real[i];
-        pImag[i] = periodicWave.imag[i];
-      }
-      
-      backend.oscSetPeriodicWave(nodeId, pReal, pImag, len);
-    } finally {
-      arena.releaseAll();
-    }
+    backend.oscSetPeriodicWave(nodeId, periodicWave.real, periodicWave.imag, len);
   }
 }

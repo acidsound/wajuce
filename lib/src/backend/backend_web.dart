@@ -12,6 +12,9 @@ import 'dart:typed_data';
 
 import '../audio_buffer.dart';
 
+Never _unsupported() =>
+    throw UnsupportedError('Operation not supported on Web backend');
+
 // ---------------------------------------------------------------------------
 // JS Interop extension types for Web Audio API
 // ---------------------------------------------------------------------------
@@ -179,7 +182,8 @@ JSAudioParam? _getParam(int nodeId, String paramName) {
 // Backend API — Context
 // ---------------------------------------------------------------------------
 
-int contextCreate(int sampleRate, int bufferSize) {
+int contextCreate(int sampleRate, int bufferSize,
+    {int inputChannels = 2, int outputChannels = 2}) {
   final ctx = JSAudioContext();
   final id = _nextId++;
   _contexts[id] = ctx;
@@ -313,6 +317,26 @@ int createWaveShaper(int ctxId) {
   final id = _nextId++;
   _nodes[id] = node as JSObject;
   return id;
+}
+
+int createMediaStreamSource(int ctxId) {
+  // On Web, this would normally take a stream. 
+  // For standardizing with Native, we might need a different approach 
+  // if we want to support dynamic stream input.
+  throw UnimplementedError('createMediaStreamSource on Web needs MediaStream input');
+}
+
+int createChannelSplitter(int ctxId, int outputs) {
+  // final ctx = _contexts[ctxId]!;
+  return _unsupported();
+}
+
+int createChannelMerger(int ctxId, int inputs) {
+  return _unsupported();
+}
+
+void oscSetPeriodicWave(int nodeId, Float32List real, Float32List imag, int len) {
+  // Needs JSOscillatorNode.setPeriodicWave
 }
 
 // ---------------------------------------------------------------------------
@@ -591,6 +615,8 @@ class MidiDeviceInfoBackend {
     required this.outputManufacturers,
   });
 }
+
+void Function(int portIndex, Uint8List data, double timestamp)? onMidiMessageReceived;
 
 JSObject? _midiAccess;
 

@@ -1,34 +1,24 @@
-# Build artifacts
-build/
+# Exclude agent files
+.agent/
+brain/
+
+# Exclude vendor extras to keep package size small
+native/engine/vendor/JUCE/examples/
+native/engine/vendor/JUCE/extras/
+native/engine/vendor/JUCE/docs/
+
+# Exclude build artifacts and logs
+example/ios_build_log.txt
+example/build_log.txt
+*.png
+*.jpg
+*.mp4
+*.zip
+
+# Standard excludes
+.DS_Store
 .dart_tool/
 .packages
+.pub-cache/
 .pub/
-.flutter-plugins*
-bin/
-
-# IDE files
-.idea/
-.vscode/
-*.iml
-*.swp
-
-# Native artifacts
-native/engine/build/
-example/build/
-example/ios/Pods/
-example/macos/Pods/
-
-# Huge JUCE components not needed for compilation
-native/engine/vendor/JUCE/examples
-native/engine/vendor/JUCE/extras
-native/engine/vendor/JUCE/docs
-native/engine/vendor/JUCE/.github
-native/engine/vendor/JUCE/.git
-native/engine/vendor/JUCE/**/*.keystore
-native/engine/vendor/JUCE/**/*.obj
-
-# Documentation and meta
-.agent/
-*.mp4
-*.png
-*.webp
+build/

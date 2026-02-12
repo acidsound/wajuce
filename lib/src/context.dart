@@ -16,7 +16,7 @@ import 'nodes/wave_shaper_node.dart';
 import 'nodes/media_stream_nodes.dart';
 import 'nodes/channel_splitter_node.dart';
 import 'nodes/channel_merger_node.dart';
-import 'package:wajuce/src/nodes/periodic_wave.dart';
+import 'nodes/periodic_wave.dart';
 import 'worklet/wa_worklet.dart';
 import 'worklet/wa_worklet_node.dart';
 import 'backend/backend.dart' as backend;

@@ -16,7 +16,9 @@ Never _unsupported() =>
 // Context
 // ---------------------------------------------------------------------------
 
-int contextCreate(int sampleRate, int bufferSize) => _unsupported();
+int contextCreate(int sampleRate, int bufferSize,
+        {int inputChannels = 2, int outputChannels = 2}) =>
+    _unsupported();
 void contextDestroy(int ctxId) => _unsupported();
 double contextGetTime(int ctxId) => _unsupported();
 double contextGetSampleRate(int ctxId) => _unsupported();
@@ -40,8 +42,9 @@ int createAnalyser(int ctxId) => _unsupported();
 int createStereoPanner(int ctxId) => _unsupported();
 int createWaveShaper(int ctxId) => _unsupported();
 int createMediaStreamSource(int ctxId) => _unsupported();
-int createMediaStreamSource(int ctxId) => _unsupported();
 int createMediaStreamDestination(int ctxId) => _unsupported();
+int createChannelSplitter(int ctxId, int outputs) => _unsupported();
+int createChannelMerger(int ctxId, int inputs) => _unsupported();
 List<int> createMachineVoice(int ctxId) => _unsupported();
 
 // ---------------------------------------------------------------------------
@@ -79,6 +82,7 @@ void paramCancel(int nodeId, String paramName, double cancelTime) =>
 void oscSetType(int nodeId, int type) => _unsupported();
 void oscStart(int nodeId, double when) => _unsupported();
 void oscStop(int nodeId, double when) => _unsupported();
+void oscSetPeriodicWave(int nodeId, Float32List real, Float32List imag, int len) => _unsupported();
 
 // ---------------------------------------------------------------------------
 // Filter
@@ -151,6 +155,8 @@ class MidiDeviceInfoBackend {
     required this.outputManufacturers,
   });
 }
+
+void Function(int portIndex, Uint8List data, double timestamp)? onMidiMessageReceived;
 
 Future<bool> midiRequestAccess({bool sysex = false}) => _unsupported();
 Future<MidiDeviceInfoBackend> midiGetDevices() => _unsupported();

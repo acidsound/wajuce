@@ -106,8 +106,7 @@ class NativeRingBuffer extends RingBuffer {
   final ffi.Pointer<ffi.Int32> _writePosPtr;
 
   NativeRingBuffer(
-      int capacity, this._ptr, this._readPosPtr, this._writePosPtr)
-      : super(capacity);
+      super.capacity, this._ptr, this._readPosPtr, this._writePosPtr);
 
   @override
   int get available {

@@ -501,9 +501,16 @@ void oscStart(int nodeId, double when) => _oscStart(nodeId, when);
 void oscStop(int nodeId, double when) => _oscStop(nodeId, when);
 
 // PeriodicWave support
-void oscSetPeriodicWave(
-    int nodeId, ffi.Pointer<ffi.Float> real, ffi.Pointer<ffi.Float> imag, int len) {
-  _oscSetPeriodicWave(nodeId, real, imag, len);
+void oscSetPeriodicWave(int nodeId, Float32List real, Float32List imag, int len) {
+  using((arena) {
+    final pReal = arena<ffi.Float>(len);
+    final pImag = arena<ffi.Float>(len);
+    for (int i = 0; i < len; i++) {
+      pReal[i] = real[i];
+      pImag[i] = imag[i];
+    }
+    _oscSetPeriodicWave(nodeId, pReal, pImag, len);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -627,7 +634,7 @@ Future<WABuffer> decodeAudioData(int ctxId, Uint8List data) async {
   final srPtr = calloc<ffi.Int32>();
 
   // First pass: get dimensions
-  int res = _decodeAudioData(encodedDataPtr, data.length, ffi.Pointer.fromAddress(0),
+  final res = _decodeAudioData(encodedDataPtr, data.length, ffi.Pointer.fromAddress(0),
       framesPtr, channelsPtr, srPtr);
 
   if (res != 0) {

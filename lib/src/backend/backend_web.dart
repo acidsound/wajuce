@@ -304,8 +304,8 @@ Future<void> _ensureWorkletModuleLoaded(int ctxId) async {
   
   final worklet = ctx.audioWorklet;
   if (worklet != null) {
-      final url = createObjectURL(blob);
-      await worklet.addModule(url).toDart;
+      final blobUrl = createObjectURL(blob);
+      await worklet.addModule(blobUrl).toDart;
       _moduleLoaded = true;
   }
 }
@@ -358,7 +358,7 @@ List<int> createMachineVoice(int ctxId) {
 // ---------------------------------------------------------------------------
 
 @JS()
-external JSObject get URL;
+external JSObject get url;
 
 @JS('URL.createObjectURL')
 // ignore: non_constant_identifier_names

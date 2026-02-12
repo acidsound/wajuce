@@ -6,9 +6,7 @@ library;
 import 'dart:async';
 import 'wa_worklet_processor.dart';
 
-import 'dart:async';
 import 'dart:typed_data';
-import 'wa_worklet_processor.dart';
 import '../backend/backend.dart' as backend;
 
 /// On Web, this runs on the main thread, driven by the AudioWorklet clock

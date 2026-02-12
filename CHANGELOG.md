@@ -1,5 +1,8 @@
 ## 0.1.2
 
+* **Maintenance**: Improved pub.dev score by resolving all library and example analysis issues.
+* **Package Hygiene**: Optimized package size and scoring by excluding unnecessary JUCE vendor assets via `.pubignore`.
+* **Consistency**: Standardized backend interfaces and naming conventions (renamed `URL` to `url` in JS interop).
 * **Web Sequencer Fix**: Resolved critical issue where Sequencer would not advance on Web by implementing a custom `AudioWorkletProcessor` bridge for accurate timing.
 * **Web I/O Fix**: Added full support for `MediaStreamSourceNode` (Microphone input) via `navigator.mediaDevices.getUserMedia`.
 * **Cross-Platform Bug Fixes**: Corrected iOS compilation errors and fixed a critical bug where unconnected nodes (like the Clock) were suspended by the browser/OS, halting logic.

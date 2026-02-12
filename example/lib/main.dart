@@ -294,7 +294,7 @@ class PadPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (gain > 0.01) {
-      final paint = Paint()..color = Colors.orangeAccent.withOpacity(0.3 + gain * 0.7);
+      final paint = Paint()..color = Colors.orangeAccent.withValues(alpha: 0.3 + gain * 0.7);
       // X position based on freq is hard to reverse, just draw where touch is roughly?
       // Actually we don't have touch pos here. Just draw a circle in center with size = gain.
       canvas.drawCircle(Offset(size.width * 0.5, size.height * 0.5), gain * 100 + 10, paint);
@@ -447,7 +447,7 @@ class _DrumPadScreenState extends State<DrumPadScreen> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.orange.withOpacity(0.5), blurRadius: 30),
+                      color: Colors.orange.withValues(alpha: 0.5), blurRadius: 30),
                 ],
               ),
               child: const Center(
@@ -577,7 +577,9 @@ class MachineVoicePool {
 
   void dispose() {
     _disposed = true;
-    for (var v in _spares) v.dispose();
+    for (var v in _spares) {
+      v.dispose();
+    }
     _spares.clear();
   }
 
@@ -724,7 +726,7 @@ class MachineState {
   bool delayEnabled = false;
   List<bool> steps = List.generate(16, (i) => i % 4 == 0);
 
-  MachineVoice? _voice;
+  final MachineVoice? _voice;
 
   MachineState(this.id, MachineVoice voice) : _voice = voice;
 
@@ -747,7 +749,6 @@ class _SequencerScreenState extends State<SequencerScreen> {
   MachineVoicePool? _pool;
 
   WAWorkletNode? _clockNode;
-  bool _audioWorkletReady = false;
 
   @override
   void initState() {
@@ -791,8 +792,6 @@ class _SequencerScreenState extends State<SequencerScreen> {
         _onTick(data['step']);
       }
     };
-    
-    setState(() => _audioWorkletReady = true);
   }
 
   @override
@@ -1107,7 +1106,7 @@ class _StepRow extends StatelessWidget {
                 color: isActive ? Colors.white : Colors.white10,
                 width: isActive ? 2 : 1,
               ),
-              boxShadow: isActive ? [BoxShadow(color: Colors.white.withOpacity(0.5), blurRadius: 4)] : null,
+              boxShadow: isActive ? [BoxShadow(color: Colors.white.withValues(alpha: 0.5), blurRadius: 4)] : null,
             ),
             child: Center(child: Text('${idx + 1}', style: TextStyle(fontSize: 8, color: isActive ? Colors.white : Colors.white54, fontWeight: isActive ? FontWeight.bold : FontWeight.normal))),
           ),
@@ -1266,7 +1265,7 @@ class _RecorderScreenState extends State<RecorderScreen> {
             decoration: BoxDecoration(
               color: Colors.black,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
             ),
             child: CustomPaint(
               painter: OscilloscopePainter(_fftData),
@@ -1282,7 +1281,7 @@ class _RecorderScreenState extends State<RecorderScreen> {
               ElevatedButton.icon(
                 onPressed: _toggleMic,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _isMicActive ? Colors.red.withOpacity(0.8) : null,
+                  backgroundColor: _isMicActive ? Colors.red.withValues(alpha: 0.8) : null,
                 ),
                 icon: Icon(_isMicActive ? Icons.mic_off : Icons.mic),
                 label: Text(_isMicActive ? "STOP MIC" : "START MIC"),

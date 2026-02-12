@@ -765,6 +765,8 @@ Future<MidiDeviceInfoBackend> midiGetDevices() async {
 void Function(int portIndex, Uint8List data, double timestamp)?
     onMidiMessageReceived;
 
+void Function(int nodeId)? onWebProcessQuantum;
+
 ffi.NativeCallable<_MidiCallbackN>? _midiCallable;
 
 void _initMidi() {

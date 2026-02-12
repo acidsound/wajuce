@@ -1,24 +1,17 @@
-# Exclude agent files
-.agent/
-brain/
-
-# Exclude vendor extras to keep package size small
+# Exclude large JUCE vendor assets and examples
 native/engine/vendor/JUCE/examples/
 native/engine/vendor/JUCE/extras/
 native/engine/vendor/JUCE/docs/
+native/engine/vendor/JUCE/ChangeLog.md
+native/engine/vendor/JUCE/README.md
 
-# Exclude build artifacts and logs
-example/ios_build_log.txt
-example/build_log.txt
-*.png
-*.jpg
-*.mp4
-*.zip
+# Keep only necessary engine source
+native/engine/vendor/JUCE/modules/
 
-# Standard excludes
-.DS_Store
-.dart_tool/
-.packages
-.pub-cache/
-.pub/
-build/
+# Specifically ignore files that are gitignored but checked in
+native/engine/vendor/JUCE/examples/Assets/Signing/InAppPurchase.keystore
+native/engine/vendor/JUCE/examples/Assets/teapot.obj
+native/engine/vendor/JUCE/examples/DemoRunner/Builds/Android/app/src/main/assets/Signing/InAppPurchase.keystore
+native/engine/vendor/JUCE/examples/DemoRunner/Builds/Android/app/src/main/assets/teapot.obj
+native/engine/vendor/JUCE/extras/AudioPluginHost/Builds/Android/app/src/main/assets/Signing/InAppPurchase.keystore
+native/engine/vendor/JUCE/extras/AudioPluginHost/Builds/Android/app/src/main/assets/teapot.obj

@@ -167,6 +167,8 @@ class MidiDeviceInfoBackend {
 
 void Function(int portIndex, Uint8List data, double timestamp)? onMidiMessageReceived;
 
+void Function(int nodeId)? onWebProcessQuantum;
+
 Future<bool> midiRequestAccess({bool sysex = false}) => _unsupported();
 Future<MidiDeviceInfoBackend> midiGetDevices() => _unsupported();
 void midiInputOpen(int portIndex) => _unsupported();

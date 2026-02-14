@@ -14,7 +14,7 @@
 - **JUCE Backend**: Leverages the industry-standard JUCE framework for native audio processing on iOS, Android, macOS, and Windows.
 - **Pure Web Support**: Automatically falls back to the browser's native Web Audio API on Web platforms via `dart:js_interop`.
 - **Zero-Overhead FFI**: Uses Dart FFI for fast communication between Dart and C++ without MethodChannel overhead.
-- **AudioWorklet Support**: Emulates the AudioWorklet system using high-priority Dart Isolates.
+- **AudioWorklet Support**: Native uses high-priority Dart Isolates; Web uses browser AudioWorklet via `dart:js_interop`.
 - **Feedback Loops**: Built-in `FeedbackBridge` automatically handles cyclic connections in the node graph (1-block delay).
 
 ---
@@ -109,18 +109,21 @@ graph TD
 
 ---
 
-## 🚀 Current Implementation Status (2026-02-12)
+## 🚀 Current Implementation Status (2026-02-14)
 
 | Feature Group | Status | Component Coverage |
 | :--- | :---: | :--- |
 | **Context & Graph** | ✅ Done | `WAContext`, `WAOfflineContext`, `connect/disconnect` |
+| **Context Extras** | ✅ Done | `listener`, `baseLatency`, `outputLatency`, `sinkId`, `getOutputTimestamp()`, `renderCapacity` (minimal wrapper) |
 | **Multi-Channel** | ✅ Done | Support up to 32 channels, `ChannelSplitter`, `ChannelMerger` |
 | **Core Nodes** | ✅ Done | `Oscillator`, `Gain`, `BiquadFilter`, `Compressor`, `Delay`, `Analyser`, `StereoPanner`, `WaveShaper`, `BufferSource` |
+| **Extended Nodes (0.1.5)** | ✅ API Surface | `ConstantSource`, `Convolver`, `IIRFilter`, `Panner`, `MediaElementAudioSource`, `MediaStreamTrackAudioSource` (backend-specific shim/fallback where needed) |
 | **AudioParam** | ✅ Done | Full automation (12 methods including `exponentialRampToValueAtTime`) |
+| **Deprecated Compatibility** | ✅ Shim | Minimal compatibility for deprecated `ScriptProcessorNode`/`AudioProcessingEvent` |
 | **MIDI API** | ✅ Done | Hardware I/O, device enumeration, SysEx support |
-| **AudioWorklet** | ✅ Done | High-priority Isolate + Lock-free Native Ring Buffer Bridge |
-| **Web Backend** | ✅ Done | Native passthrough via `js_interop` |
-| **Build System** | ✅ Done | iOS, Android, macOS, Windows (CMake-ready) |
+| **AudioWorklet** | ✅ Done | Native isolate bridge + Web AudioWorklet passthrough/module loading flow |
+| **Web Backend** | ✅ Done | Browser Web Audio passthrough via `js_interop` (pub.dev platform badge may not list Web due plugin metadata) |
+| **Build System** | ✅ Done | iOS, Android, macOS, Windows native backends + Web backend path |
 
 ---
 
@@ -133,7 +136,7 @@ The 0.1.1 release introduces significant optimizations for complex node graphs:
 ---
 
 ## 🎹 AudioWorklet
-Run custom DSP code in a dedicated high-priority Isolate:
+Run custom DSP code with a unified module flow (native isolate bridge, Web AudioWorklet):
 
 ```dart
 // 1. Define processor
@@ -197,14 +200,12 @@ osc.start();
 
 ---
 
----
-
 ## 🤖 AI Skills & Automation
 
 This project includes specialized **AI Skills** to help agents maintain the development environment.
 
 - **JUCE Management (`juce_setup`)**: Automated detection and setup of the JUCE framework.
-  - Located at: `.agent/skills/juce_management/SKILL.md`
+  - Located at: `.agent/skills/juce_management/SKILL.md` (repository checkout context)
   - Purpose: Fixes broken dependencies and configures JUCE submodules.
 - **Install scripts**:
   - `tool/install_wajuce.dart`

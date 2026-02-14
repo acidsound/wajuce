@@ -1,3 +1,9 @@
+## 0.2.1
+
+* **Documentation Accuracy**: Synchronized README feature/status wording with current implementation details.
+* **AudioWorklet Wording**: Clarified native vs web worklet behavior in feature/overview sections.
+* **Status Matrix Refresh**: Updated implementation date and expanded coverage notes for context extras and extended node surface.
+
 ## 0.2.0
 
 * **Agent Install Automation**: Added cross-platform executable installer and verifier scripts for first-time integration:

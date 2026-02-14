@@ -86,7 +86,9 @@ class DX7Processor extends WAWorkletProcessor {
 }
 
 // 2. Register & Run
-ctx.audioWorklet.registerProcessor('dx7', () => DX7Processor());
+WAWorkletModules.define('dx7', (registrar) {
+  registrar.registerProcessor('dx7', () => DX7Processor());
+});
 await ctx.audioWorklet.addModule('dx7');
 final node = ctx.createWorkletNode('dx7');
 node.connect(ctx.destination);
@@ -151,3 +153,6 @@ To use these skills, simply ask your AI agent: *"Help me set up the JUCE environ
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
+The native backend links against JUCE. If you distribute products using the
+native JUCE runtime, you must also comply with JUCE's license terms:
+[JUCE 8 Licence](https://juce.com/legal/juce-8-licence/).

@@ -61,6 +61,9 @@ abstract class WAWorkletProcessor {
 
 /// Port for communication from the audio thread back to main thread.
 class WAProcessorPort {
+  /// Creates a processor-side message port.
+  WAProcessorPort();
+
   /// Callback for messages received from the main thread (main → audio).
   void Function(dynamic)? onMessage;
 
@@ -76,7 +79,7 @@ class WAProcessorPort {
 
   /// Internal: set by the audio isolate to wire up the SendPort.
   void Function(dynamic)? _sendCallback;
-  
+
   /// Used by the system to bind the postMessage callback.
   void bind(void Function(dynamic) callback) {
     _sendCallback = callback;

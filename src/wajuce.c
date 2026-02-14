@@ -125,6 +125,10 @@ FFI_PLUGIN_EXPORT void wajuce_param_set_target(int32_t node_id,
 FFI_PLUGIN_EXPORT void wajuce_param_cancel(int32_t node_id, const char *param,
                                            double cancel_time) {}
 
+FFI_PLUGIN_EXPORT void wajuce_param_cancel_and_hold(int32_t node_id,
+                                                    const char *param,
+                                                    double time) {}
+
 // ============================================================================
 // Oscillator
 // ============================================================================
@@ -207,8 +211,48 @@ FFI_PLUGIN_EXPORT int32_t wajuce_create_worklet_bridge(int32_t ctx_id,
   return -1;
 }
 
-FFI_PLUGIN_EXPORT void *wajuce_get_ring_buffer_ptr(int32_t bridge_id) {
-  return (void *)0;
+FFI_PLUGIN_EXPORT float *wajuce_worklet_get_buffer_ptr(int32_t bridge_id,
+                                                       int32_t direction,
+                                                       int32_t channel) {
+  return 0;
+}
+
+FFI_PLUGIN_EXPORT int32_t *wajuce_worklet_get_read_pos_ptr(int32_t bridge_id,
+                                                           int32_t direction,
+                                                           int32_t channel) {
+  return 0;
+}
+
+FFI_PLUGIN_EXPORT int32_t *wajuce_worklet_get_write_pos_ptr(int32_t bridge_id,
+                                                            int32_t direction,
+                                                            int32_t channel) {
+  return 0;
+}
+
+FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_read_pos(int32_t bridge_id,
+                                                      int32_t direction,
+                                                      int32_t channel) {
+  return 0;
+}
+
+FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_write_pos(int32_t bridge_id,
+                                                       int32_t direction,
+                                                       int32_t channel) {
+  return 0;
+}
+
+FFI_PLUGIN_EXPORT void wajuce_worklet_set_read_pos(int32_t bridge_id,
+                                                   int32_t direction,
+                                                   int32_t channel,
+                                                   int32_t value) {}
+
+FFI_PLUGIN_EXPORT void wajuce_worklet_set_write_pos(int32_t bridge_id,
+                                                    int32_t direction,
+                                                    int32_t channel,
+                                                    int32_t value) {}
+
+FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_capacity(int32_t bridge_id) {
+  return 0;
 }
 
 // ============================================================================

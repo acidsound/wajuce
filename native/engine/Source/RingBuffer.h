@@ -64,6 +64,17 @@ public:
     std::fill(buffer.begin(), buffer.end(), 0.0f);
   }
 
+  int getReadPos() const { return readPos.load(std::memory_order_acquire); }
+  int getWritePos() const { return writePos.load(std::memory_order_acquire); }
+  void setReadPos(int pos) {
+    const int wrapped = ((pos % capacity) + capacity) % capacity;
+    readPos.store(wrapped, std::memory_order_release);
+  }
+  void setWritePos(int pos) {
+    const int wrapped = ((pos % capacity) + capacity) % capacity;
+    writePos.store(wrapped, std::memory_order_release);
+  }
+
   // Direct pointers for Zero-Copy FFI access
   float *getBufferRawPtr() { return buffer.data(); }
   int *getReadPosPtr() { return reinterpret_cast<int *>(&readPos); }

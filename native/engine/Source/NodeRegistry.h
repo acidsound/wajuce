@@ -96,6 +96,12 @@ struct NodeEntry {
     case NodeType::Delay:
       if (p == "delayTime")
         return asDelay()->delayTime;
+      else if (p == "feedback")
+        return asDelay()->feedback;
+      break;
+    case NodeType::StereoPanner:
+      if (p == "pan")
+        return asPanner()->pan;
       break;
     case NodeType::Compressor:
       if (p == "threshold")

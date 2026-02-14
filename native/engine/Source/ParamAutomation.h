@@ -5,7 +5,9 @@
  */
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstddef>
 #include <mutex>
 #include <vector>
 
@@ -30,28 +32,22 @@ class ParamTimeline {
 public:
   void setValueAtTime(float value, double time) {
     std::lock_guard<std::mutex> lock(mtx);
-    events.push_back({AutomationEventType::SetValue, time, value, 0.0f});
-    sortEvents();
+    addEvent({AutomationEventType::SetValue, time, value, 0.0f});
   }
 
   void linearRampToValueAtTime(float value, double endTime) {
     std::lock_guard<std::mutex> lock(mtx);
-    events.push_back({AutomationEventType::LinearRamp, endTime, value, 0.0f});
-    sortEvents();
+    addEvent({AutomationEventType::LinearRamp, endTime, value, 0.0f});
   }
 
   void exponentialRampToValueAtTime(float value, double endTime) {
     std::lock_guard<std::mutex> lock(mtx);
-    events.push_back(
-        {AutomationEventType::ExponentialRamp, endTime, value, 0.0f});
-    sortEvents();
+    addEvent({AutomationEventType::ExponentialRamp, endTime, value, 0.0f});
   }
 
   void setTargetAtTime(float target, double startTime, float timeConstant) {
     std::lock_guard<std::mutex> lock(mtx);
-    events.push_back(
-        {AutomationEventType::SetTarget, startTime, target, timeConstant});
-    sortEvents();
+    addEvent({AutomationEventType::SetTarget, startTime, target, timeConstant});
   }
 
   void cancelScheduledValues(double cancelTime) {
@@ -63,47 +59,69 @@ public:
                  events.end());
   }
 
+  void cancelAndHoldAtTime(double cancelTime) {
+    std::lock_guard<std::mutex> lock(mtx);
+    const float held = lastValue.load(std::memory_order_relaxed);
+    events.erase(std::remove_if(events.begin(), events.end(),
+                                [cancelTime](const AutomationEvent &e) {
+                                  return e.time >= cancelTime;
+                                }),
+                 events.end());
+    addEvent({AutomationEventType::SetValue, cancelTime, held, 0.0f});
+  }
+
   // Process automation for a block of samples
   // Returns the value at the end of the block
   float processBlock(double startTime, double sampleRate, int numSamples,
                      float *outputValues = nullptr) {
-    std::lock_guard<std::mutex> lock(mtx);
-    float val = lastValue;
+    std::unique_lock<std::mutex> lock(mtx, std::try_to_lock);
+    if (!lock.owns_lock()) {
+      const float held = lastValue.load(std::memory_order_relaxed);
+      if (outputValues) {
+        std::fill(outputValues, outputValues + numSamples, held);
+      }
+      return held;
+    }
 
-    // Optimize: Only search if there are events and we are past the current
-    // event time
+    if (sampleRate <= 0.0 || numSamples <= 0) {
+      return lastValue.load(std::memory_order_relaxed);
+    }
+
+    prunePastEvents(startTime);
+
+    const float initialValue = lastValue.load(std::memory_order_relaxed);
+    float val = initialValue;
+    int currentIdx = -1;
+    size_t nextIdx = 0;
+    while (nextIdx < events.size() && events[nextIdx].time <= startTime) {
+      currentIdx = static_cast<int>(nextIdx);
+      ++nextIdx;
+    }
+
     for (int i = 0; i < numSamples; ++i) {
       double t = startTime + (double)i / sampleRate;
-      val = getValueAtTime(val, t, sampleRate);
+      while (nextIdx < events.size() && events[nextIdx].time <= t) {
+        currentIdx = static_cast<int>(nextIdx);
+        ++nextIdx;
+      }
+      val = getValueAtEventIndex(initialValue, val, currentIdx, t, sampleRate);
       if (outputValues)
         outputValues[i] = val;
     }
-    lastValue = val;
+    lastValue.store(val, std::memory_order_relaxed);
     return val;
   }
 
   void setLastValue(float v) {
     std::lock_guard<std::mutex> lock(mtx);
-    lastValue = v;
+    lastValue.store(v, std::memory_order_relaxed);
   }
 
 private:
-  float getValueAtTime(float currentVal, double time, double sampleRate) {
-    if (events.empty())
-      return lastValue;
-
-    // 1. Find the current event (the latest event with e.time <= time)
-    int currentIdx = -1;
-    for (int i = (int)events.size() - 1; i >= 0; --i) {
-      if (events[i].time <= time) {
-        currentIdx = i;
-        break;
-      }
-    }
-
-    // 2. If no event has started yet, return the initial/last value
-    if (currentIdx == -1) {
-      return lastValue;
+  float getValueAtEventIndex(float initialValue, float currentVal,
+                             int currentIdx, double time, double sampleRate) {
+    if (currentIdx < 0) {
+      return initialValue;
     }
 
     const auto &e = events[currentIdx];
@@ -118,7 +136,7 @@ private:
           nextE.type == AutomationEventType::ExponentialRamp) {
 
         float startValue =
-            (currentIdx == 0) ? lastValue : events[currentIdx].value;
+            (currentIdx == 0) ? initialValue : events[currentIdx].value;
         double startTime = events[currentIdx].time;
         double endTime = nextE.time;
         float duration = (float)(endTime - startTime);
@@ -165,15 +183,39 @@ private:
   }
 
   void sortEvents() {
-    std::sort(events.begin(), events.end(),
-              [](const AutomationEvent &a, const AutomationEvent &b) {
-                return a.time < b.time;
-              });
+    std::stable_sort(events.begin(), events.end(),
+                     [](const AutomationEvent &a, const AutomationEvent &b) {
+                       return a.time < b.time;
+                     });
+  }
+
+  void addEvent(const AutomationEvent &event) {
+    events.push_back(event);
+    if (events.size() > 1 &&
+        events[events.size() - 2].time > events.back().time) {
+      sortEvents();
+    }
+  }
+
+  // Keep at most one event in the past as a baseline for future ramps.
+  void prunePastEvents(double currentTime) {
+    if (events.size() < 3)
+      return;
+
+    size_t keepFrom = 0;
+    while (keepFrom + 1 < events.size() && events[keepFrom + 1].time <= currentTime) {
+      ++keepFrom;
+    }
+
+    if (keepFrom > 0) {
+      events.erase(events.begin(),
+                   events.begin() + static_cast<std::ptrdiff_t>(keepFrom));
+    }
   }
 
   std::vector<AutomationEvent> events;
   std::mutex mtx;
-  float lastValue = 0.0f;
+  std::atomic<float> lastValue{0.0f};
 };
 
 } // namespace wajuce

@@ -6,6 +6,7 @@
 /// the native backend's ID-based approach.
 library;
 
+import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
@@ -40,10 +41,14 @@ extension type JSAudioContext._(JSObject _) implements JSObject {
   external JSAudioBuffer createBuffer(
       JSNumber numberOfChannels, JSNumber length, JSNumber sampleRate);
   external JSPeriodicWave createPeriodicWave(
-      JSFloat32Array real, JSFloat32Array imag, [JSObject? options]);
+      JSFloat32Array real, JSFloat32Array imag,
+      [JSObject? options]);
   external JSPromise decodeAudioData(JSArrayBuffer audioData);
   external JSObject createMediaStreamSource(JSObject stream);
-  external JSObject createScriptProcessor([JSNumber? bufferSize, JSNumber? numberOfInputChannels, JSNumber? numberOfOutputChannels]);
+  external JSObject createScriptProcessor(
+      [JSNumber? bufferSize,
+      JSNumber? numberOfInputChannels,
+      JSNumber? numberOfOutputChannels]);
 }
 
 @JS('PeriodicWave')
@@ -61,6 +66,7 @@ extension type JSAudioParam._(JSObject _) implements JSObject {
   external JSAudioParam setTargetAtTime(
       JSNumber target, JSNumber startTime, JSNumber timeConstant);
   external JSAudioParam cancelScheduledValues(JSNumber startTime);
+  external JSAudioParam cancelAndHoldAtTime(JSNumber cancelTime);
 }
 
 @JS('AudioBuffer')
@@ -79,6 +85,7 @@ extension type JSAudioBuffer._(JSObject _) implements JSObject {
 int _nextId = 1;
 final Map<int, JSObject> _nodes = {};
 final Map<int, JSAudioContext> _contexts = {};
+final Map<int, JSObject> _workletPorts = {};
 
 /// Resolve the AudioParam for a given node by paramName
 JSAudioParam? _getParam(int nodeId, String paramName) {
@@ -88,6 +95,44 @@ JSAudioParam? _getParam(int nodeId, String paramName) {
     return node.getProperty(paramName.toJS) as JSAudioParam;
   } catch (_) {
     return null;
+  }
+}
+
+@JS('JSON.stringify')
+external JSString _jsonStringify(JSAny? value);
+
+@JS('JSON.parse')
+external JSAny _jsonParse(JSString source);
+
+dynamic _jsMessageToDart(dynamic value) {
+  if (value == null) return null;
+  if (value is JSString) return value.toDart;
+  if (value is JSNumber) return value.toDartDouble;
+  if (value is JSBoolean) return value.toDart;
+  if (value is JSObject || value is JSArray) {
+    try {
+      final json = _jsonStringify(value as JSAny?);
+      return jsonDecode(json.toDart);
+    } catch (_) {
+      return value;
+    }
+  }
+  return value;
+}
+
+JSAny? _dartMessageToJs(dynamic value) {
+  if (value == null) return null;
+  if (value is JSAny) return value;
+  if (value is String) return value.toJS;
+  if (value is bool) return value.toJS;
+  if (value is int) return value.toJS;
+  if (value is double) return value.toJS;
+  if (value is num) return value.toJS;
+  try {
+    final encoded = jsonEncode(value);
+    return _jsonParse(encoded.toJS);
+  } catch (_) {
+    return value.toString().toJS;
   }
 }
 
@@ -231,7 +276,8 @@ int createChannelMerger(int ctxId, int inputs) {
 
 int createMediaStreamSource(int ctxId, [dynamic stream]) {
   if (stream == null) {
-      throw UnimplementedError('MediaStreamSource on Web needs explicit stream object');
+    throw UnimplementedError(
+        'MediaStreamSource on Web needs explicit stream object');
   }
   final node = _contexts[ctxId]!.createMediaStreamSource(stream as JSObject);
   final id = _nextId++;
@@ -246,7 +292,6 @@ int createMediaStreamDestination(int ctxId) {
   _nodes[id] = node;
   return id;
 }
-
 
 // ---------------------------------------------------------------------------
 // Worklet & I/O
@@ -290,6 +335,20 @@ registerProcessor('wajuce-proxy-processor', WajuceProxyProcessor);
 ''';
 
 bool _moduleLoaded = false;
+final Set<String> _loadedExternalWorkletModules = {};
+
+bool _looksLikeModuleUrl(String moduleIdentifier) {
+  if (moduleIdentifier.startsWith('http://') ||
+      moduleIdentifier.startsWith('https://') ||
+      moduleIdentifier.startsWith('blob:') ||
+      moduleIdentifier.startsWith('data:') ||
+      moduleIdentifier.startsWith('/') ||
+      moduleIdentifier.startsWith('./') ||
+      moduleIdentifier.startsWith('../')) {
+    return true;
+  }
+  return moduleIdentifier.endsWith('.js') || moduleIdentifier.endsWith('.mjs');
+}
 
 Future<void> _ensureWorkletModuleLoaded(int ctxId) async {
   if (_moduleLoaded) return;
@@ -301,36 +360,48 @@ Future<void> _ensureWorkletModuleLoaded(int ctxId) async {
     [_kWorkletModuleSource.toJS].toJS,
     JSBlobPropertyBag(type: 'application/javascript'.toJS),
   );
-  
+
   final worklet = ctx.audioWorklet;
   if (worklet != null) {
-      final blobUrl = createObjectURL(blob);
-      await worklet.addModule(blobUrl).toDart;
-      _moduleLoaded = true;
+    final blobUrl = createObjectURL(blob);
+    await worklet.addModule(blobUrl).toDart;
+    _moduleLoaded = true;
   }
 }
 
 // Callback interface for Dart side
 void Function(int nodeId)? onWebProcessQuantum;
+void Function(int nodeId, dynamic data)? onWebWorkletMessage;
 
-int createWorkletNode(int ctxId, int numInputs, int numOutputs) {
-  // We cannot block here to wait for addModule (async), 
-  // so we assume it's called during initialization or we handle the promise externally.
-  // However, for strict compatibility, we should ensure the module is loaded.
-  // In this synchronous C-API style method, we'll create the node. 
-  // Warning: addModule MUST be called before this.
-  
+int createWorkletNode(
+    int ctxId, String processorName, int numInputs, int numOutputs,
+    {bool useProxyProcessor = false}) {
+  if (useProxyProcessor && !_moduleLoaded) {
+    throw StateError(
+        'Proxy worklet module is not loaded. Call audioWorklet.addModule(...) before createWorkletNode().');
+  }
   final ctx = _contexts[ctxId]!;
-  final node = JSAudioWorkletNode(ctx, 'wajuce-proxy-processor'.toJS);
-  
+  final processorNameToCreate =
+      useProxyProcessor ? 'wajuce-proxy-processor' : processorName;
+  final node = JSAudioWorkletNode(ctx, processorNameToCreate.toJS);
+
   final id = _nextId++;
   _nodes[id] = node;
+  _workletPorts[id] = node.port;
 
-  // Listen to the 'tick' from the AudioWorkletProcessor
-  node.port.setProperty('onmessage'.toJS, (JSObject event) {
-      // Treat this as the processing tick
-      onWebProcessQuantum?.call(id);
-  }.toJS);
+  node.port.setProperty(
+      'onmessage'.toJS,
+      (JSObject event) {
+        final payload = event.getProperty('data'.toJS);
+        if (useProxyProcessor && payload is JSObject) {
+          final type = payload.getProperty('type'.toJS);
+          if (type is JSString && type.toDart == 'process') {
+            onWebProcessQuantum?.call(id);
+            return;
+          }
+        }
+        onWebWorkletMessage?.call(id, _jsMessageToDart(payload));
+      }.toJS);
 
   return id;
 }
@@ -340,17 +411,53 @@ Future<void> webInitializeWorklet(int ctxId) async {
   await _ensureWorkletModuleLoaded(ctxId);
 }
 
+Future<void> webAddWorkletModule(int ctxId, String moduleIdentifier) async {
+  await _ensureWorkletModuleLoaded(ctxId);
+
+  final trimmed = moduleIdentifier.trim();
+  if (trimmed.isEmpty || !_looksLikeModuleUrl(trimmed)) {
+    return;
+  }
+  if (_loadedExternalWorkletModules.contains(trimmed)) {
+    return;
+  }
+
+  final ctx = _contexts[ctxId];
+  final worklet = ctx?.audioWorklet;
+  if (worklet == null) return;
+
+  try {
+    await worklet.addModule(trimmed.toJS).toDart;
+    _loadedExternalWorkletModules.add(trimmed);
+  } catch (_) {
+    // Keep compatibility with in-memory/registerProcessor path.
+  }
+}
+
 int workletGetCapacity(int bridgeId) => 0; // Not used on Web
-int workletGetBufferPtr(int bridgeId, int type, int channel) => 0; 
+int workletGetBufferPtr(int bridgeId, int type, int channel) => 0;
 int workletGetReadPosPtr(int bridgeId, int type, int channel) => 0;
 int workletGetWritePosPtr(int bridgeId, int type, int channel) => 0;
+int workletGetReadPos(int bridgeId, int type, int channel) => 0;
+int workletGetWritePos(int bridgeId, int type, int channel) => 0;
+void workletSetReadPos(int bridgeId, int type, int channel, int value) {}
+void workletSetWritePos(int bridgeId, int type, int channel, int value) {}
+void workletPostMessage(int nodeId, dynamic message) {
+  final port = _workletPorts[nodeId];
+  if (port == null) return;
+  final jsMessage = _dartMessageToJs(message);
+  port.callMethod('postMessage'.toJS, jsMessage);
+}
+
+bool workletSupportsExternalProcessors() => true;
 
 List<int> createMachineVoice(int ctxId) {
   // Fallback for Web: create individual nodes (Dart side handles connection)
   // We return a list of NEGATIVE IDs or standard IDs to indicate
   // that the caller should manually route them.
   // Actually, the caller (backend wrapper or main) handles the fallback exception.
-  throw UnimplementedError('createMachineVoice native optimization not supported on Web');
+  throw UnimplementedError(
+      'createMachineVoice native optimization not supported on Web');
 }
 
 // ---------------------------------------------------------------------------
@@ -406,14 +513,14 @@ extension type JSMediaDevices._(JSObject _) implements JSObject {
 Future<JSObject?> getWebMicrophoneStream() async {
   if (mediaDevices == null) return null;
   try {
-     // Request audio only
-     final constraints = JSObject();
-     constraints.setProperty('audio'.toJS, true.toJS);
-     constraints.setProperty('video'.toJS, false.toJS);
-     
-     final promise = mediaDevices!.getUserMedia(constraints);
-     final stream = await promise.toDart;
-     return stream as JSObject;
+    // Request audio only
+    final constraints = JSObject();
+    constraints.setProperty('audio'.toJS, true.toJS);
+    constraints.setProperty('video'.toJS, false.toJS);
+
+    final promise = mediaDevices!.getUserMedia(constraints);
+    final stream = await promise.toDart;
+    return stream as JSObject;
   } catch (e) {
     // print('Error getting user media: $e');
     return null;
@@ -449,6 +556,7 @@ void disconnectAll(int ctxId, int srcId) {
 void removeNode(int ctxId, int nodeId) {
   disconnectAll(ctxId, nodeId);
   _nodes.remove(nodeId);
+  _workletPorts.remove(nodeId);
 }
 
 // ---------------------------------------------------------------------------
@@ -487,6 +595,19 @@ void paramCancel(int nodeId, String paramName, double cancelTime) {
   param?.cancelScheduledValues(cancelTime.toJS);
 }
 
+void paramCancelAndHold(int nodeId, String paramName, double time) {
+  final param = _getParam(nodeId, paramName);
+  if (param == null) return;
+  try {
+    param.cancelAndHoldAtTime(time.toJS);
+  } catch (_) {
+    // Fallback for browsers without cancelAndHoldAtTime.
+    final held = param.value.toDartDouble;
+    param.cancelScheduledValues(time.toJS);
+    param.setValueAtTime(held.toJS, time.toJS);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Backend API — Oscillator
 // ---------------------------------------------------------------------------
@@ -508,7 +629,8 @@ void oscStop(int nodeId, double when) {
   _nodes[nodeId]?.callMethod('stop'.toJS, when.toJS);
 }
 
-void oscSetPeriodicWave(int nodeId, Float32List real, Float32List imag, int len) {
+void oscSetPeriodicWave(
+    int nodeId, Float32List real, Float32List imag, int len) {
   final node = _nodes[nodeId];
   if (node == null) return;
   // Use first context as default
@@ -522,7 +644,14 @@ void oscSetPeriodicWave(int nodeId, Float32List real, Float32List imag, int len)
 // ---------------------------------------------------------------------------
 
 const _filterTypes = [
-  'lowpass', 'highpass', 'bandpass', 'lowshelf', 'highshelf', 'peaking', 'notch', 'allpass',
+  'lowpass',
+  'highpass',
+  'bandpass',
+  'lowshelf',
+  'highshelf',
+  'peaking',
+  'notch',
+  'allpass',
 ];
 
 void filterSetType(int nodeId, int type) {
@@ -683,7 +812,8 @@ class MidiDeviceInfoBackend {
   });
 }
 
-void Function(int portIndex, Uint8List data, double timestamp)? onMidiMessageReceived;
+void Function(int portIndex, Uint8List data, double timestamp)?
+    onMidiMessageReceived;
 
 JSObject? _midiAccess;
 
@@ -692,8 +822,8 @@ Future<bool> midiRequestAccess({bool sysex = false}) async {
     final navigator = globalContext.getProperty('navigator'.toJS) as JSObject;
     final options = JSObject();
     options.setProperty('sysex'.toJS, sysex.toJS);
-    final promise = navigator.callMethod('requestMIDIAccess'.toJS, options)
-        as JSPromise;
+    final promise =
+        navigator.callMethod('requestMIDIAccess'.toJS, options) as JSPromise;
     final access = await promise.toDart;
     _midiAccess = access as JSObject;
     return true;
@@ -705,9 +835,12 @@ Future<bool> midiRequestAccess({bool sysex = false}) async {
 Future<MidiDeviceInfoBackend> midiGetDevices() async {
   if (_midiAccess == null) {
     return MidiDeviceInfoBackend(
-      inputCount: 0, outputCount: 0,
-      inputNames: [], outputNames: [],
-      inputManufacturers: [], outputManufacturers: [],
+      inputCount: 0,
+      outputCount: 0,
+      inputNames: [],
+      outputNames: [],
+      inputManufacturers: [],
+      outputManufacturers: [],
     );
   }
 
@@ -722,8 +855,10 @@ Future<MidiDeviceInfoBackend> midiGetDevices() async {
     final result = inputIterator.callMethod('next'.toJS) as JSObject;
     if ((result.getProperty('done'.toJS) as JSBoolean).toDart) break;
     final port = result.getProperty('value'.toJS) as JSObject;
-    inputNames.add((port.getProperty('name'.toJS) as JSString?)?.toDart ?? 'Unknown');
-    inputManufacturers.add((port.getProperty('manufacturer'.toJS) as JSString?)?.toDart ?? '');
+    inputNames
+        .add((port.getProperty('name'.toJS) as JSString?)?.toDart ?? 'Unknown');
+    inputManufacturers.add(
+        (port.getProperty('manufacturer'.toJS) as JSString?)?.toDart ?? '');
   }
 
   final outputs = _midiAccess!.getProperty('outputs'.toJS) as JSObject;
@@ -732,8 +867,10 @@ Future<MidiDeviceInfoBackend> midiGetDevices() async {
     final result = outputIterator.callMethod('next'.toJS) as JSObject;
     if ((result.getProperty('done'.toJS) as JSBoolean).toDart) break;
     final port = result.getProperty('value'.toJS) as JSObject;
-    outputNames.add((port.getProperty('name'.toJS) as JSString?)?.toDart ?? 'Unknown');
-    outputManufacturers.add((port.getProperty('manufacturer'.toJS) as JSString?)?.toDart ?? '');
+    outputNames
+        .add((port.getProperty('name'.toJS) as JSString?)?.toDart ?? 'Unknown');
+    outputManufacturers.add(
+        (port.getProperty('manufacturer'.toJS) as JSString?)?.toDart ?? '');
   }
 
   return MidiDeviceInfoBackend(
@@ -751,7 +888,8 @@ final Map<int, JSObject> _midiOutputPorts = {};
 
 JSObject? _getMidiPort(bool isInput, int index) {
   if (_midiAccess == null) return null;
-  final map = _midiAccess!.getProperty((isInput ? 'inputs' : 'outputs').toJS) as JSObject;
+  final map = _midiAccess!.getProperty((isInput ? 'inputs' : 'outputs').toJS)
+      as JSObject;
   final iterator = map.callMethod('values'.toJS) as JSObject;
   int i = 0;
   while (true) {

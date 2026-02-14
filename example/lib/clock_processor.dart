@@ -1,21 +1,51 @@
 import 'dart:typed_data';
 import 'package:wajuce/wajuce.dart';
 
+const String _clockProcessorName = 'clock-processor';
+
+final bool _clockWorkletModuleDefined = WAWorkletModules.define(
+  _clockProcessorName,
+  (registrar) {
+    registrar.registerProcessor(
+      _clockProcessorName,
+      () => ClockProcessor(),
+    );
+  },
+);
+
+Future<void> loadClockWorkletModule(WAContext context) async {
+  // Touch top-level module registration so import intent is explicit.
+  if (!_clockWorkletModuleDefined) {
+    // Already defined by another import path; nothing to do.
+  }
+  await context.audioWorklet.addModule(_clockProcessorName);
+}
+
+WAWorkletNode createClockWorkletNode(WAContext context,
+    {Map<String, double> parameterDefaults = const {}}) {
+  return context.createWorkletNode(
+    _clockProcessorName,
+    parameterDefaults: parameterDefaults,
+  );
+}
+
 class ClockProcessor extends WAWorkletProcessor {
   double _sampleRate = 44100.0;
+  double _contextStartTime = 0.0;
   double _bpm = 120.0;
   bool _running = false;
   int _currentFrame = 0;
   double _nextTickFrame = 0.0;
   int _step = 0;
 
-  ClockProcessor() : super(name: 'clock-processor');
+  ClockProcessor() : super(name: _clockProcessorName);
 
   @override
   void init([Map<String, double> options = const {}]) {
     if (options.containsKey('sampleRate')) {
       _sampleRate = options['sampleRate']!;
     }
+
     // Listen for messages from main thread
     port.onMessage = (data) {
       if (data is Map) {
@@ -23,24 +53,25 @@ class ClockProcessor extends WAWorkletProcessor {
           _running = true;
           _currentFrame = 0;
           _step = 0;
-          _scheduleNextTick();
+          _nextTickFrame = 0.0;
+          _contextStartTime = (data['contextTime'] as num?)?.toDouble() ?? 0.0;
         } else if (data['type'] == 'stop') {
           _running = false;
         } else if (data['type'] == 'bpm') {
-          _bpm = (data['value'] as num).toDouble();
-          _scheduleNextTick(reset: false);
+          final nextBpm = (data['value'] as num?)?.toDouble() ?? _bpm;
+          _bpm = nextBpm > 1 ? nextBpm : 1.0;
+          if (_running) {
+            _nextTickFrame = _currentFrame.toDouble() + _framesPer16th;
+          }
+        } else if (data['type'] == 'syncTime') {
+          _contextStartTime =
+              (data['contextTime'] as num?)?.toDouble() ?? _contextStartTime;
         }
       }
     };
   }
 
-  void _scheduleNextTick({bool reset = true}) {
-    if (reset) {
-       _nextTickFrame = _currentFrame.toDouble();
-    } else {
-       // Recalculate based on new BPM if needed, but for now simple
-    }
-  }
+  double get _framesPer16th => (15.0 / _bpm) * _sampleRate;
 
   @override
   bool process(
@@ -50,36 +81,34 @@ class ClockProcessor extends WAWorkletProcessor {
   ) {
     if (!_running) return true;
 
-    // Process 128 frames
-    int framesToProcess = 128; // Standard Web Audio block size
-    // In wajuce standard block is 128? Or variable?
-    // WAWorkletProcessor implementation implies it's called per block.
-    // Let's assume block size logic in AudioIsolate handles this.
-    // Actually, inputs[0][0].length tells us the block size.
+    int framesToProcess = 128;
     if (inputs.isNotEmpty && inputs[0].isNotEmpty) {
       framesToProcess = inputs[0][0].length;
     } else if (outputs.isNotEmpty && outputs[0].isNotEmpty) {
       framesToProcess = outputs[0][0].length;
     }
 
-    // Samples per 16th note
-    // 1 minute = 60 seconds
-    // 1 beat = 60/BPM seconds
-    // 16th note = 1/4 beat = 15/BPM seconds
-    // Frames per 16th = (15/BPM) * SampleRate
-    double framesPer16th = (15.0 / _bpm) * _sampleRate;
+    final blockStartFrame = _currentFrame.toDouble();
+    final blockEndFrame = blockStartFrame + framesToProcess;
+    final framesPer16th = _framesPer16th;
+    if (framesPer16th <= 0) {
+      _currentFrame += framesToProcess;
+      return true;
+    }
 
-    // Check if we hit the next tick within this block
-    if (_currentFrame + framesToProcess >= _nextTickFrame) {
-      // It's time!
-      // Send message to main thread
-      port.postMessage({'type': 'tick', 'step': _step});
-      _step = (_step + 1) % 16;
+    // Emit every tick that falls inside this render quantum.
+    while (_nextTickFrame < blockEndFrame) {
+      if (_nextTickFrame >= blockStartFrame) {
+        final scheduledTime =
+            _contextStartTime + (_nextTickFrame / _sampleRate);
+        port.postMessage({
+          'type': 'tick',
+          'step': _step,
+          'time': scheduledTime,
+        });
+        _step = (_step + 1) % 16;
+      }
       _nextTickFrame += framesPer16th;
-      
-      // Handle multiple ticks in one block? (Very fast BPM or large block)
-      // For now assume standard BPM and block size (128 samples is extremely short ~3ms)
-      // chances of >1 tick in 3ms is low unless BPM > 5000
     }
 
     _currentFrame += framesToProcess;

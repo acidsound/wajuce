@@ -18,6 +18,7 @@ import 'nodes/channel_splitter_node.dart';
 import 'nodes/channel_merger_node.dart';
 import 'nodes/periodic_wave.dart';
 import 'worklet/wa_worklet.dart';
+import 'worklet/wa_worklet_module.dart';
 import 'worklet/wa_worklet_node.dart';
 import 'backend/backend.dart' as backend;
 
@@ -38,13 +39,16 @@ class WAContext {
   late final WAWorklet _worklet;
 
   /// Creates a new AudioContext.
-  WAContext({int sampleRate = 44100, int bufferSize = 512, int numberOfChannels = 2}) {
+  WAContext(
+      {int sampleRate = 44100,
+      int bufferSize = 512,
+      int numberOfChannels = 2}) {
     _ctxId = backend.contextCreate(sampleRate, bufferSize,
         inputChannels: numberOfChannels, outputChannels: numberOfChannels);
     final destId = backend.contextGetDestinationId(_ctxId);
     _destination = WADestinationNode(nodeId: destId, contextId: _ctxId);
     _worklet = WAWorklet(contextId: _ctxId, sampleRate: sampleRate);
-    
+
     // Initialize Web AudioWorklet if on Web
     backend.webInitializeWorklet(_ctxId);
   }
@@ -54,7 +58,7 @@ class WAContext {
     _worklet = WAWorklet(contextId: _ctxId);
     final destId = backend.contextGetDestinationId(_ctxId);
     _destination = WADestinationNode(nodeId: destId, contextId: _ctxId);
-    
+
     // Initialize Web AudioWorklet if on Web
     backend.webInitializeWorklet(_ctxId);
   }
@@ -212,7 +216,20 @@ class WAContext {
   /// Create an AudioWorkletNode.
   WAWorkletNode createWorkletNode(String processorName,
       {Map<String, double> parameterDefaults = const {}}) {
-    final nodeId = backend.createWorkletNode(_ctxId, 2, 2); // default stereo
+    final hasLocalProcessor = _worklet.hasProcessor(processorName);
+    final localModuleDefined =
+        WAWorkletModules.resolve(processorName) != null && !hasLocalProcessor;
+    if (localModuleDefined) {
+      throw StateError('Module for "$processorName" is defined but not loaded. '
+          'Call audioWorklet.addModule(...) before createWorkletNode().');
+    }
+    if (!hasLocalProcessor && !backend.workletSupportsExternalProcessors()) {
+      throw StateError(
+          'Processor "$processorName" is not available on this backend. '
+          'Import/define a Dart worklet module and call audioWorklet.addModule(...) first.');
+    }
+    final nodeId = backend.createWorkletNode(_ctxId, processorName, 2, 2,
+        useProxyProcessor: hasLocalProcessor);
     return WAWorkletNode(
       nodeId: nodeId,
       contextId: _ctxId,
@@ -221,7 +238,6 @@ class WAContext {
       parameterDefaults: parameterDefaults,
     );
   }
-
 
   /// Create an AudioBuffer.
   WABuffer createBuffer(int numberOfChannels, int length, double sampleRate) {
@@ -238,7 +254,8 @@ class WAContext {
   }
 
   /// Creates a specialized Machine Voice (Optimized batch creation).
-  /// Returns [Oscillator, Filter, Gain, Panner, Delay, DelayFb, DelayWet].
+  /// Returns nodes in this fixed order:
+  /// `Oscillator`, `Filter`, `Gain`, `Panner`, `Delay`, `DelayFb`, `DelayWet`.
   /// This is an optimization to avoid main thread blocking during voice creation.
   List<WANode> createMachineVoice() {
     final ids = backend.createMachineVoice(_ctxId);
@@ -248,9 +265,20 @@ class WAContext {
       WABiquadFilterNode(nodeId: ids[1], contextId: _ctxId),
       WAGainNode(nodeId: ids[2], contextId: _ctxId),
       WAStereoPannerNode(nodeId: ids[3], contextId: _ctxId),
-      WADelayNode(nodeId: ids[4], contextId: _ctxId, maxDelayTime: 5.0), // Safe max
+      WADelayNode(
+          nodeId: ids[4], contextId: _ctxId, maxDelayTime: 5.0), // Safe max
       WAGainNode(nodeId: ids[5], contextId: _ctxId),
       WAGainNode(nodeId: ids[6], contextId: _ctxId),
     ];
+  }
+
+  /// Asynchronously creates a specialized Machine Voice on a worker isolate.
+  ///
+  /// Returns nodes in this fixed order:
+  /// `Oscillator`, `Filter`, `Gain`, `Panner`, `Delay`, `DelayFb`, `DelayWet`.
+  @Deprecated(
+      'Use createMachineVoice(). This async variant will be removed in a future release.')
+  Future<List<WANode>> createMachineVoiceAsync() async {
+    return createMachineVoice();
   }
 }

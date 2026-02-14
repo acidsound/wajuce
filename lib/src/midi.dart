@@ -24,8 +24,10 @@ import 'backend/backend.dart' as backend;
 enum WAMidiAccessState {
   /// Access request is pending.
   pending,
+
   /// Access has been granted.
   granted,
+
   /// Access has been denied.
   denied,
 }
@@ -34,15 +36,20 @@ enum WAMidiAccessState {
 class WAMidiInput {
   /// Unique identifier for the port.
   final String id;
+
   /// Human-readable name of the port.
   final String name;
+
   /// Manufacturer of the device.
   final String manufacturer;
+
   /// The hardware port index.
   final int portIndex;
 
   /// Callback for incoming MIDI messages.
-  /// [data] is the raw MIDI bytes, [timestamp] is in milliseconds.
+  ///
+  /// The first argument contains raw MIDI bytes and the second argument
+  /// is the timestamp in milliseconds.
   void Function(Uint8List data, double timestamp)? onMessage;
 
   /// Creates a new MIDI input port representation.
@@ -71,10 +78,13 @@ class WAMidiInput {
 class WAMidiOutput {
   /// Unique identifier for the port.
   final String id;
+
   /// Human-readable name of the port.
   final String name;
+
   /// Manufacturer of the device.
   final String manufacturer;
+
   /// The hardware port index.
   final int portIndex;
 

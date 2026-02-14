@@ -16,6 +16,7 @@ import 'wa_worklet.dart';
 class WAWorkletNode extends WANode {
   final String _processorName;
   final WAWorklet _worklet;
+  bool _isDisposed = false;
 
   /// The message port for bidirectional communication with the processor.
   late final WAMessagePort port;
@@ -29,10 +30,15 @@ class WAWorkletNode extends WANode {
     Map<String, double> parameterDefaults = const {},
   })  : _processorName = processorName,
         _worklet = worklet {
+    final effectiveDefaults = <String, double>{
+      'sampleRate': worklet.sampleRate.toDouble(),
+      ...parameterDefaults,
+    };
+
     // Create the processor in the audio isolate
     // On native JUCE, the nodeId IS the bridgeId (returned from createWorkletNode)
     _worklet.createNode(nodeId, processorName,
-        paramDefaults: parameterDefaults, bridgeId: nodeId);
+        paramDefaults: effectiveDefaults, bridgeId: nodeId);
 
     // Set up bidirectional message port
     port = WAMessagePort(
@@ -57,7 +63,16 @@ class WAWorkletNode extends WANode {
 
   /// Destroy the processor.
   void destroy() {
+    dispose();
+  }
+
+  @override
+  void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    _worklet.removeMessageListener(nodeId);
     _worklet.removeNode(nodeId);
+    super.dispose();
   }
 }
 

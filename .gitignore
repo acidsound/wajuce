@@ -24,12 +24,18 @@ android/local.properties
 android/app/src/main/res/drawable-*/
 android/app/src/main/res/mipmap-*/
 *.keystore
+!native/engine/vendor/JUCE/examples/Assets/Signing/InAppPurchase.keystore
+!native/engine/vendor/JUCE/examples/DemoRunner/Builds/Android/app/src/main/assets/Signing/InAppPurchase.keystore
+!native/engine/vendor/JUCE/extras/AudioPluginHost/Builds/Android/app/src/main/assets/Signing/InAppPurchase.keystore
 
 # C++/CMake/JUCE
 native/engine/build/
 # native/engine/vendor/
 *.o
 *.obj
+!native/engine/vendor/JUCE/examples/Assets/teapot.obj
+!native/engine/vendor/JUCE/examples/DemoRunner/Builds/Android/app/src/main/assets/teapot.obj
+!native/engine/vendor/JUCE/extras/AudioPluginHost/Builds/Android/app/src/main/assets/teapot.obj
 *.a
 *.lib
 *.so

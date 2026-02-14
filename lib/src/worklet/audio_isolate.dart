@@ -12,8 +12,10 @@ import 'audio_isolate_native.dart' as native;
 class AudioIsolateManager {
   /// Isolate instance.
   Isolate? _isolate;
+
   /// SendPort to communicate with the isolate.
   SendPort? _isolateSendPort;
+
   /// ReceivePort for messages from the isolate.
   ReceivePort? _mainReceivePort;
   final _readyCompleter = Completer<void>();
@@ -30,7 +32,7 @@ class AudioIsolateManager {
     int numOutputs = 2,
   }) async {
     _mainReceivePort = ReceivePort();
-    
+
     final config = AudioIsolateConfig(
       mainSendPort: _mainReceivePort!.sendPort,
       sampleRate: sampleRate,
@@ -40,7 +42,7 @@ class AudioIsolateManager {
     );
 
     _isolate = await Isolate.spawn(_audioIsolateEntry, config);
-    
+
     _mainReceivePort!.listen((message) {
       if (message is SendPort) {
         _isolateSendPort = message;
@@ -61,7 +63,9 @@ class AudioIsolateManager {
   /// Creates a processor node in the isolate.
   void createNode(int nodeId, String processorName,
       {Map<String, double> paramDefaults = const {}, int? bridgeId}) {
-    _isolateSendPort?.send(CreateNodeMessage(nodeId, processorName, paramDefaults, bridgeId: bridgeId));
+    _isolateSendPort?.send(CreateNodeMessage(
+        nodeId, processorName, paramDefaults,
+        bridgeId: bridgeId));
   }
 
   /// Removes a processor node from the isolate.
@@ -95,31 +99,41 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
     if (bridgedNodes.isEmpty) return;
 
     bool dataProcessed = false;
-    for (final info in bridgedNodes.values) {
+    final deadNodeIds = <int>[];
+
+    for (final entry in bridgedNodes.entries) {
+      final nodeId = entry.key;
+      final info = entry.value;
       if (info.toIsolate.available >= quantumSize) {
         for (int ch = 0; ch < info.toIsolate.channelCount; ch++) {
-           info.toIsolate.readChannel(ch, info.inputs[0][ch], 0, quantumSize);
+          info.toIsolate.readChannel(ch, info.inputs[0][ch], 0, quantumSize);
         }
 
         final keepAlive = info.processor.process(info.inputs, info.outputs, {});
 
         for (int ch = 0; ch < info.fromIsolate.channelCount; ch++) {
-           info.fromIsolate.writeChannel(ch, info.outputs[0][ch], 0, quantumSize);
+          info.fromIsolate
+              .writeChannel(ch, info.outputs[0][ch], 0, quantumSize);
         }
         dataProcessed = true;
 
         if (!keepAlive) {
-          info.processor.dispose();
-          activeNodes.remove(info.nodeId);
-          bridgedNodes.remove(info.nodeId);
+          deadNodeIds.add(nodeId);
         }
       }
     }
 
+    for (final nodeId in deadNodeIds) {
+      activeNodes.remove(nodeId)?.dispose();
+      bridgedNodes.remove(nodeId);
+    }
+
+    if (bridgedNodes.isEmpty) return;
+
     if (dataProcessed) {
       Future.microtask(runBridgedProcessing);
     } else {
-      Future.delayed(Duration.zero, runBridgedProcessing);
+      Future.delayed(const Duration(milliseconds: 1), runBridgedProcessing);
     }
   }
 
@@ -127,12 +141,15 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
     if (message is RegisterProcessorMessage) {
       processors[message.name] = message.factory;
     } else if (message is CreateNodeMessage) {
+      activeNodes.remove(message.nodeId)?.dispose();
+      bridgedNodes.remove(message.nodeId);
+
       final factory = processors[message.processorName];
       if (factory != null) {
         final proc = factory();
         proc.init(message.paramDefaults);
         proc.port.bind((data) {
-           config.mainSendPort.send(PortMessage(message.nodeId, data));
+          config.mainSendPort.send(PortMessage(message.nodeId, data));
         });
         activeNodes[message.nodeId] = proc;
 
@@ -146,7 +163,7 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
         }
       }
     } else if (message is RemoveNodeMessage) {
-      activeNodes.remove(message.nodeId);
+      activeNodes.remove(message.nodeId)?.dispose();
       bridgedNodes.remove(message.nodeId);
     } else if (message is ProcessorMessage) {
       final proc = activeNodes[message.nodeId];
@@ -158,8 +175,13 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
       if (proc != null && !bridgedNodes.containsKey(message.nodeId)) {
         final inputs = [message.inputData];
         final outputs = [List.generate(2, (_) => Float32List(quantumSize))];
-        proc.process(inputs, outputs, {});
-        config.mainSendPort.send(ProcessedQuantumMessage(message.nodeId, outputs[0]));
+        final keepAlive = proc.process(inputs, outputs, {});
+        config.mainSendPort
+            .send(ProcessedQuantumMessage(message.nodeId, outputs[0]));
+        if (!keepAlive) {
+          proc.dispose();
+          activeNodes.remove(message.nodeId);
+        }
       }
     } else if (message is StopIsolateMessage) {
       for (final proc in activeNodes.values) {

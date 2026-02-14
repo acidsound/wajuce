@@ -74,6 +74,8 @@ void paramSetTarget(int nodeId, String paramName, double target,
     _unsupported();
 void paramCancel(int nodeId, String paramName, double cancelTime) =>
     _unsupported();
+void paramCancelAndHold(int nodeId, String paramName, double time) =>
+    _unsupported();
 
 // ---------------------------------------------------------------------------
 // Oscillator
@@ -82,7 +84,9 @@ void paramCancel(int nodeId, String paramName, double cancelTime) =>
 void oscSetType(int nodeId, int type) => _unsupported();
 void oscStart(int nodeId, double when) => _unsupported();
 void oscStop(int nodeId, double when) => _unsupported();
-void oscSetPeriodicWave(int nodeId, Float32List real, Float32List imag, int len) => _unsupported();
+void oscSetPeriodicWave(
+        int nodeId, Float32List real, Float32List imag, int len) =>
+    _unsupported();
 
 // ---------------------------------------------------------------------------
 // Filter
@@ -135,13 +139,26 @@ Future<Object?> getWebMicrophoneStream() async => null;
 
 Future<void> webInitializeWorklet(int ctxId) async {}
 
-int createWorkletNode(int ctxId, int numInputs, int numOutputs) =>
+Future<void> webAddWorkletModule(int ctxId, String moduleIdentifier) async {}
+
+int createWorkletNode(
+        int ctxId, String processorName, int numInputs, int numOutputs,
+        {bool useProxyProcessor = false}) =>
     _unsupported();
 
 int workletGetCapacity(int bridgeId) => _unsupported();
 int workletGetBufferPtr(int bridgeId, int type, int channel) => _unsupported();
 int workletGetReadPosPtr(int bridgeId, int type, int channel) => _unsupported();
-int workletGetWritePosPtr(int bridgeId, int type, int channel) => _unsupported();
+int workletGetWritePosPtr(int bridgeId, int type, int channel) =>
+    _unsupported();
+int workletGetReadPos(int bridgeId, int type, int channel) => _unsupported();
+int workletGetWritePos(int bridgeId, int type, int channel) => _unsupported();
+void workletSetReadPos(int bridgeId, int type, int channel, int value) =>
+    _unsupported();
+void workletSetWritePos(int bridgeId, int type, int channel, int value) =>
+    _unsupported();
+void workletPostMessage(int nodeId, dynamic message) => _unsupported();
+bool workletSupportsExternalProcessors() => false;
 
 // ---------------------------------------------------------------------------
 // MIDI
@@ -165,9 +182,11 @@ class MidiDeviceInfoBackend {
   });
 }
 
-void Function(int portIndex, Uint8List data, double timestamp)? onMidiMessageReceived;
+void Function(int portIndex, Uint8List data, double timestamp)?
+    onMidiMessageReceived;
 
 void Function(int nodeId)? onWebProcessQuantum;
+void Function(int nodeId, dynamic data)? onWebWorkletMessage;
 
 Future<bool> midiRequestAccess({bool sysex = false}) => _unsupported();
 Future<MidiDeviceInfoBackend> midiGetDevices() => _unsupported();

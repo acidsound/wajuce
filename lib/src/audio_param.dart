@@ -80,7 +80,8 @@ class WAParam {
   /// [timeConstant] controlling the rate (like an RC filter).
   WAParam setTargetAtTime(
       double target, double startTime, double timeConstant) {
-    backend.paramSetTarget(_nodeId, _paramName, target, startTime, timeConstant);
+    backend.paramSetTarget(
+        _nodeId, _paramName, target, startTime, timeConstant);
     return this;
   }
 
@@ -104,7 +105,7 @@ class WAParam {
   /// Cancels scheduled changes at [cancelTime] and holds current interpolated
   /// value.
   WAParam cancelAndHoldAtTime(double cancelTime) {
-    // TODO: Implement cancelAndHoldAtTime in backend
+    backend.paramCancelAndHold(_nodeId, _paramName, cancelTime);
     return this;
   }
 }

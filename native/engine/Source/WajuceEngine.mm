@@ -65,6 +65,20 @@ static wajuce::Engine *getEngine(int32_t id) {
   return it != wajuce::g_engines.end() ? it->second.get() : nullptr;
 }
 
+static wajuce::SPSCRingBuffer *getWorkletRingBuffer(int32_t bridgeId,
+                                                     int32_t direction,
+                                                     int32_t channel) {
+  auto *engine = wajuce::findEngineForNode(bridgeId);
+  if (!engine)
+    return nullptr;
+  auto *node = engine->getRegistry().get(bridgeId);
+  if (!node || node->type != wajuce::NodeType::WorkletBridge)
+    return nullptr;
+  return (direction == 0)
+             ? node->asWorkletBridge()->toIsolate->getChannel(channel)
+             : node->asWorkletBridge()->fromIsolate->getChannel(channel);
+}
+
 // ============================================================================
 // Engine Implementation
 // ============================================================================
@@ -161,6 +175,7 @@ void Engine::close() {
 int32_t Engine::addToGraph(NodeType type,
                            std::unique_ptr<juce::AudioProcessor> proc) {
   std::lock_guard<std::mutex> lock(graphMtx);
+  constexpr auto updateKind = juce::AudioProcessorGraph::UpdateKind::async;
   proc->setPlayConfigDetails(2, 2, sampleRate, bufferSize);
   proc->prepareToPlay(sampleRate, bufferSize);
 
@@ -177,7 +192,7 @@ int32_t Engine::addToGraph(NodeType type,
   }
 
   auto *rawPtr = proc.get();
-  auto node = graph->addNode(std::move(proc));
+  auto node = graph->addNode(std::move(proc), std::nullopt, updateKind);
   if (!node)
     return -1;
 
@@ -232,10 +247,13 @@ int32_t Engine::createMediaStreamSource() {
                        std::make_unique<MediaStreamSourceProcessor>());
   if (id != -1) {
     std::lock_guard<std::mutex> lock(graphMtx);
+    constexpr auto updateKind = juce::AudioProcessorGraph::UpdateKind::async;
     auto it = idToGraphNode.find(id);
     if (it != idToGraphNode.end()) {
-      graph->addConnection({{inputNode->nodeID, 0}, {it->second, 0}});
-      graph->addConnection({{inputNode->nodeID, 1}, {it->second, 1}});
+      graph->addConnection({{inputNode->nodeID, 0}, {it->second, 0}},
+                           updateKind);
+      graph->addConnection({{inputNode->nodeID, 1}, {it->second, 1}},
+                           updateKind);
     }
   }
   return id;
@@ -252,9 +270,10 @@ int32_t Engine::createWorkletBridge(int32_t inputs, int32_t outputs) {
 
 void Engine::removeNode(int32_t nodeId) {
   std::lock_guard<std::mutex> lock(graphMtx);
+  constexpr auto updateKind = juce::AudioProcessorGraph::UpdateKind::async;
   auto it = idToGraphNode.find(nodeId);
   if (it != idToGraphNode.end()) {
-    graph->removeNode(it->second);
+    graph->removeNode(it->second, updateKind);
     idToGraphNode.erase(it);
   }
 
@@ -262,8 +281,8 @@ void Engine::removeNode(int32_t nodeId) {
   for (auto fit = feedbackConnections.begin();
        fit != feedbackConnections.end();) {
     if (fit->srcId == nodeId || fit->dstId == nodeId) {
-      graph->removeNode(fit->sender);
-      graph->removeNode(fit->receiver);
+      graph->removeNode(fit->sender, updateKind);
+      graph->removeNode(fit->receiver, updateKind);
       fit = feedbackConnections.erase(fit);
     } else {
       ++fit;
@@ -276,6 +295,7 @@ void Engine::removeNode(int32_t nodeId) {
 // Batch creation for Machine Voice
 void Engine::createMachineVoice(int32_t *resultIds) {
   std::lock_guard<std::mutex> lock(graphMtx);
+  constexpr auto updateKind = juce::AudioProcessorGraph::UpdateKind::async;
 
   // Create Nodes
   // 0: Osc, 1: Filter, 2: Gain, 3: Panner, 4: Delay, 5: DelayFb, 6: DelayWet
@@ -305,32 +325,99 @@ void Engine::createMachineVoice(int32_t *resultIds) {
 
   // Initial Params
   gain->gain = 0.0f;
-  delay->delayTime = 0.5f; // 1.0 might be too long default
+  // Web Audio DelayNode default delayTime is 0 seconds.
+  delay->delayTime = 0.0f;
+  delayFb->gain = 0.0f;
   delayWet->gain = 0.0f;
 
   // Add to Graph
-  auto nOsc = graph->addNode(std::move(osc));
-  auto nFilter = graph->addNode(std::move(filter));
-  auto nGain = graph->addNode(std::move(gain));
-  auto nPanner = graph->addNode(std::move(panner));
-  auto nDelay = graph->addNode(std::move(delay));
-  auto nDelayFb = graph->addNode(std::move(delayFb));
-  auto nDelayWet = graph->addNode(std::move(delayWet));
+  auto nOsc = graph->addNode(std::move(osc), std::nullopt, updateKind);
+  auto nFilter = graph->addNode(std::move(filter), std::nullopt, updateKind);
+  auto nGain = graph->addNode(std::move(gain), std::nullopt, updateKind);
+  auto nPanner = graph->addNode(std::move(panner), std::nullopt, updateKind);
+  auto nDelay = graph->addNode(std::move(delay), std::nullopt, updateKind);
+  auto nDelayFb = graph->addNode(std::move(delayFb), std::nullopt, updateKind);
+  auto nDelayWet =
+      graph->addNode(std::move(delayWet), std::nullopt, updateKind);
 
   // INTERNAL Connections (No output connection yet - Lazy)
-  // Osc -> Filter -> Gain -> Panner
-  graph->addConnection({{nOsc->nodeID, 0}, {nFilter->nodeID, 0}});
-  graph->addConnection({{nFilter->nodeID, 0}, {nGain->nodeID, 0}});
-  graph->addConnection({{nGain->nodeID, 0}, {nPanner->nodeID, 0}});
+  // Osc (mono) -> Filter -> Gain -> Panner (stereo)
+  // Duplicate mono signal to ch0/ch1 before panner so center pan is true stereo.
+  graph->addConnection({{nOsc->nodeID, 0}, {nFilter->nodeID, 0}}, updateKind);
+  graph->addConnection({{nOsc->nodeID, 0}, {nFilter->nodeID, 1}}, updateKind);
+  graph->addConnection({{nFilter->nodeID, 0}, {nGain->nodeID, 0}}, updateKind);
+  graph->addConnection({{nFilter->nodeID, 1}, {nGain->nodeID, 1}}, updateKind);
+  graph->addConnection({{nGain->nodeID, 0}, {nPanner->nodeID, 0}}, updateKind);
+  graph->addConnection({{nGain->nodeID, 1}, {nPanner->nodeID, 1}}, updateKind);
 
-  // Gain -> Delay path
-  graph->addConnection({{nGain->nodeID, 0}, {nDelay->nodeID, 0}});
-  graph->addConnection({{nDelay->nodeID, 0}, {nDelayWet->nodeID, 0}});
+  // Gain -> Delay path (stereo)
+  graph->addConnection({{nGain->nodeID, 0}, {nDelay->nodeID, 0}}, updateKind);
+  graph->addConnection({{nGain->nodeID, 1}, {nDelay->nodeID, 1}}, updateKind);
+  graph->addConnection({{nDelay->nodeID, 0}, {nDelayWet->nodeID, 0}},
+                       updateKind);
+  graph->addConnection({{nDelay->nodeID, 1}, {nDelayWet->nodeID, 1}},
+                       updateKind);
 
-  // Delay Feedback loop
-  graph->addConnection({{nDelay->nodeID, 0}, {nDelayFb->nodeID, 0}});
-  // graph->addConnection({{nDelayFb->nodeID, 0}, {nDelay->nodeID, 0}}); //
-  // ILLEGAL DIRECT CYCLE - Causes O(N^2) validation overhead
+  // Delay Feedback loop (stereo)
+  graph->addConnection({{nDelay->nodeID, 0}, {nDelayFb->nodeID, 0}},
+                       updateKind);
+  graph->addConnection({{nDelay->nodeID, 1}, {nDelayFb->nodeID, 1}},
+                       updateKind);
+
+  // Complete external feedback path with a 1-block bridge.
+  // This preserves web-style Delay->Gain->Delay behavior while avoiding
+  // direct graph cycles in JUCE.
+  std::shared_ptr<juce::AudioBuffer<float>> feedbackSharedBuffer;
+  juce::AudioProcessorGraph::NodeID feedbackSenderNodeId{};
+  juce::AudioProcessorGraph::NodeID feedbackReceiverNodeId{};
+  bool feedbackBridgeReady = false;
+
+  feedbackSharedBuffer =
+      std::make_shared<juce::AudioBuffer<float>>(2, bufferSize);
+  feedbackSharedBuffer->clear();
+
+  auto feedbackSender =
+      std::make_unique<FeedbackSenderProcessor>(feedbackSharedBuffer);
+  feedbackSender->setPlayConfigDetails(2, 2, sr, bs);
+  feedbackSender->prepareToPlay(sr, bs);
+  auto feedbackReceiver =
+      std::make_unique<FeedbackReceiverProcessor>(feedbackSharedBuffer);
+  feedbackReceiver->setPlayConfigDetails(2, 2, sr, bs);
+  feedbackReceiver->prepareToPlay(sr, bs);
+
+  auto nFeedbackSender =
+      graph->addNode(std::move(feedbackSender), std::nullopt, updateKind);
+  auto nFeedbackReceiver =
+      graph->addNode(std::move(feedbackReceiver), std::nullopt, updateKind);
+
+  if (nFeedbackSender && nFeedbackReceiver) {
+    feedbackSenderNodeId = nFeedbackSender->nodeID;
+    feedbackReceiverNodeId = nFeedbackReceiver->nodeID;
+
+    bool c0 = graph->addConnection(
+        {{nDelayFb->nodeID, 0}, {feedbackSenderNodeId, 0}}, updateKind);
+    bool c1 = graph->addConnection(
+        {{nDelayFb->nodeID, 1}, {feedbackSenderNodeId, 1}}, updateKind);
+    bool c2 = graph->addConnection(
+        {{feedbackReceiverNodeId, 0}, {nDelay->nodeID, 0}}, updateKind);
+    bool c3 = graph->addConnection(
+        {{feedbackReceiverNodeId, 1}, {nDelay->nodeID, 1}}, updateKind);
+
+    feedbackBridgeReady = c0 && c1 && c2 && c3;
+    if (!feedbackBridgeReady) {
+      graph->removeNode(feedbackSenderNodeId, updateKind);
+      graph->removeNode(feedbackReceiverNodeId, updateKind);
+      feedbackSharedBuffer.reset();
+    }
+  } else {
+    if (nFeedbackSender) {
+      graph->removeNode(nFeedbackSender->nodeID, updateKind);
+    }
+    if (nFeedbackReceiver) {
+      graph->removeNode(nFeedbackReceiver->nodeID, updateKind);
+    }
+    feedbackSharedBuffer.reset();
+  }
 
   // Store IDs in Registry and Map to Graph IDs
   // We cannot use addToGraph() because we already hold the lock.
@@ -362,10 +449,23 @@ void Engine::createMachineVoice(int32_t *resultIds) {
   // DelayWet
   resultIds[6] = registry.add(NodeType::Gain, nDelayWet->getProcessor());
   idToGraphNode[resultIds[6]] = nDelayWet->nodeID;
+
+  if (feedbackBridgeReady && feedbackSharedBuffer) {
+    FeedbackConnection conn;
+    conn.srcId = resultIds[5]; // Delay feedback gain
+    conn.dstId = resultIds[4]; // Delay node input
+    conn.output = 0;
+    conn.input = 0;
+    conn.sender = feedbackSenderNodeId;
+    conn.receiver = feedbackReceiverNodeId;
+    conn.buffer = feedbackSharedBuffer;
+    feedbackConnections.push_back(conn);
+  }
 }
 
 void Engine::connect(int32_t srcId, int32_t dstId, int output, int input) {
   std::lock_guard<std::mutex> lock(graphMtx);
+  constexpr auto updateKind = juce::AudioProcessorGraph::UpdateKind::async;
   juce::AudioProcessorGraph::NodeID srcNodeId, dstNodeId;
   if (srcId == 0)
     srcNodeId = inputNode->nodeID;
@@ -392,7 +492,8 @@ void Engine::connect(int32_t srcId, int32_t dstId, int output, int input) {
 
     if (!wouldCycle) {
       bool ok = graph->addConnection({NodeAndChannel{srcNodeId, outPort},
-                                      NodeAndChannel{dstNodeId, inPort}});
+                                      NodeAndChannel{dstNodeId, inPort}},
+                                     updateKind);
       if (ok)
         return true;
     }
@@ -411,8 +512,10 @@ void Engine::connect(int32_t srcId, int32_t dstId, int output, int input) {
     receiverProc->setPlayConfigDetails(2, 2, sampleRate, bufferSize);
     receiverProc->prepareToPlay(sampleRate, bufferSize);
 
-    auto senderNode = graph->addNode(std::move(senderProc));
-    auto receiverNode = graph->addNode(std::move(receiverProc));
+    auto senderNode =
+        graph->addNode(std::move(senderProc), std::nullopt, updateKind);
+    auto receiverNode =
+        graph->addNode(std::move(receiverProc), std::nullopt, updateKind);
     if (!senderNode || !receiverNode) {
       WA_LOG("[wajuce] FeedbackBridge: addNode failed.");
       return false;
@@ -421,9 +524,11 @@ void Engine::connect(int32_t srcId, int32_t dstId, int output, int input) {
     auto receiverNID = receiverNode->nodeID;
 
     bool c1 = graph->addConnection({NodeAndChannel{srcNodeId, outPort},
-                                    NodeAndChannel{senderNID, outPort % 2}});
+                                    NodeAndChannel{senderNID, outPort % 2}},
+                                   updateKind);
     bool c2 = graph->addConnection({NodeAndChannel{receiverNID, inPort % 2},
-                                    NodeAndChannel{dstNodeId, inPort}});
+                                    NodeAndChannel{dstNodeId, inPort}},
+                                   updateKind);
 
     if (c1 && c2) {
       WA_LOG("[wajuce] FeedbackBridge OK for %d -> %d", srcId, dstId);
@@ -439,8 +544,8 @@ void Engine::connect(int32_t srcId, int32_t dstId, int output, int input) {
       return true;
     } else {
       WA_LOG("[wajuce] FeedbackBridge failed.");
-      graph->removeNode(senderNID);
-      graph->removeNode(receiverNID);
+      graph->removeNode(senderNID, updateKind);
+      graph->removeNode(receiverNID, updateKind);
       return false;
     }
   };
@@ -464,6 +569,7 @@ void Engine::connect(int32_t srcId, int32_t dstId, int output, int input) {
 
 void Engine::disconnect(int32_t srcId, int32_t dstId) {
   std::lock_guard<std::mutex> lock(graphMtx);
+  constexpr auto updateKind = juce::AudioProcessorGraph::UpdateKind::async;
   auto srcIt = idToGraphNode.find(srcId);
   auto dstIt = idToGraphNode.find(dstId);
   juce::AudioProcessorGraph::NodeID src =
@@ -476,15 +582,15 @@ void Engine::disconnect(int32_t srcId, int32_t dstId) {
                    : (dstIt != idToGraphNode.end()
                           ? dstIt->second
                           : juce::AudioProcessorGraph::NodeID{});
-  graph->removeConnection({{src, 0}, {dst, 0}});
-  graph->removeConnection({{src, 1}, {dst, 1}});
+  graph->removeConnection({{src, 0}, {dst, 0}}, updateKind);
+  graph->removeConnection({{src, 1}, {dst, 1}}, updateKind);
 
   // Cleanup feedback bridges between these specific nodes
   for (auto fit = feedbackConnections.begin();
        fit != feedbackConnections.end();) {
     if (fit->srcId == srcId && fit->dstId == dstId) {
-      graph->removeNode(fit->sender);
-      graph->removeNode(fit->receiver);
+      graph->removeNode(fit->sender, updateKind);
+      graph->removeNode(fit->receiver, updateKind);
       fit = feedbackConnections.erase(fit);
     } else {
       ++fit;
@@ -494,6 +600,7 @@ void Engine::disconnect(int32_t srcId, int32_t dstId) {
 
 void Engine::disconnectAll(int32_t srcId) {
   std::lock_guard<std::mutex> lock(graphMtx);
+  constexpr auto updateKind = juce::AudioProcessorGraph::UpdateKind::async;
   auto it = idToGraphNode.find(srcId);
   if (it == idToGraphNode.end())
     return;
@@ -501,25 +608,20 @@ void Engine::disconnectAll(int32_t srcId) {
   auto connections = graph->getConnections();
   for (auto &conn : connections) {
     if (conn.source.nodeID == src)
-      graph->removeConnection(conn);
+      graph->removeConnection(conn, updateKind);
   }
 
   // Cleanup all feedback bridges originating from this node
   for (auto fit = feedbackConnections.begin();
        fit != feedbackConnections.end();) {
     if (fit->srcId == srcId) {
-      graph->removeNode(fit->sender);
-      graph->removeNode(fit->receiver);
+      graph->removeNode(fit->sender, updateKind);
+      graph->removeNode(fit->receiver, updateKind);
       fit = feedbackConnections.erase(fit);
     } else {
       ++fit;
     }
   }
-}
-
-ParamTimeline *Engine::getOrCreateTimeline(int32_t nodeId, const char *param) {
-  auto *entry = registry.get(nodeId);
-  return entry ? entry->getOrCreateTimeline(param) : nullptr;
 }
 
 void Engine::processAutomation(double startTime, double sr, int numSamples) {
@@ -656,31 +758,62 @@ void Engine::paramSet(int32_t nodeId, const char *param, float value) {
 
 void Engine::paramSetAtTime(int32_t nodeId, const char *param, float v,
                             double t) {
-  paramSet(nodeId, param, v);
-  auto *tl = getOrCreateTimeline(nodeId, param);
+  std::lock_guard<std::recursive_mutex> lock(registry.getMutex());
+  auto *entry = registry.get(nodeId);
+  if (!entry)
+    return;
+  auto *tl = entry->getOrCreateTimeline(param);
   if (tl)
     tl->setValueAtTime(v, t);
 }
 void Engine::paramLinearRamp(int32_t nid, const char *p, float v, double te) {
-  auto *tl = getOrCreateTimeline(nid, p);
+  std::lock_guard<std::recursive_mutex> lock(registry.getMutex());
+  auto *entry = registry.get(nid);
+  if (!entry)
+    return;
+  auto *tl = entry->getOrCreateTimeline(p);
   if (tl)
     tl->linearRampToValueAtTime(v, te);
 }
 void Engine::paramExpRamp(int nid, const char *p, float v, double te) {
-  auto *tl = getOrCreateTimeline(nid, p);
+  std::lock_guard<std::recursive_mutex> lock(registry.getMutex());
+  auto *entry = registry.get(nid);
+  if (!entry)
+    return;
+  auto *tl = entry->getOrCreateTimeline(p);
   if (tl)
     tl->exponentialRampToValueAtTime(v, te);
 }
 void Engine::paramSetTarget(int nid, const char *p, float tgt, double ts,
                             float tc) {
-  auto *tl = getOrCreateTimeline(nid, p);
+  std::lock_guard<std::recursive_mutex> lock(registry.getMutex());
+  auto *entry = registry.get(nid);
+  if (!entry)
+    return;
+  auto *tl = entry->getOrCreateTimeline(p);
   if (tl)
     tl->setTargetAtTime(tgt, ts, tc);
 }
 void Engine::paramCancel(int nid, const char *p, double tc) {
-  auto *tl = getOrCreateTimeline(nid, p);
+  std::lock_guard<std::recursive_mutex> lock(registry.getMutex());
+  auto *entry = registry.get(nid);
+  if (!entry)
+    return;
+  auto *tl = entry->getOrCreateTimeline(p);
   if (tl)
     tl->cancelScheduledValues(tc);
+}
+
+void Engine::paramCancelAndHold(int nid, const char *p, double t) {
+  std::lock_guard<std::recursive_mutex> lock(registry.getMutex());
+  auto *entry = registry.get(nid);
+  if (!entry)
+    return;
+  auto *tl = entry->getOrCreateTimeline(p);
+  if (!tl)
+    return;
+  tl->setLastValue(entry->getParam(p));
+  tl->cancelAndHoldAtTime(t);
 }
 
 void Engine::oscSetType(int32_t nodeId, int type) {
@@ -921,46 +1054,54 @@ FFI_PLUGIN_EXPORT int32_t wajuce_create_worklet_bridge(int32_t id,
 FFI_PLUGIN_EXPORT float *wajuce_worklet_get_buffer_ptr(int32_t bridge_id,
                                                        int32_t direction,
                                                        int32_t channel) {
-  auto *e = wajuce::findEngineForNode(bridge_id);
-  if (!e)
-    return nullptr;
-  auto *node = e->getRegistry().get(bridge_id);
-  if (!node || node->type != wajuce::NodeType::WorkletBridge)
-    return nullptr;
-  auto *rb = (direction == 0)
-                 ? node->asWorkletBridge()->toIsolate->getChannel(channel)
-                 : node->asWorkletBridge()->fromIsolate->getChannel(channel);
+  auto *rb = getWorkletRingBuffer(bridge_id, direction, channel);
   return rb ? rb->getBufferRawPtr() : nullptr;
 }
 
 FFI_PLUGIN_EXPORT int32_t *wajuce_worklet_get_read_pos_ptr(int32_t bridge_id,
                                                            int32_t direction,
                                                            int32_t channel) {
-  auto *e = wajuce::findEngineForNode(bridge_id);
-  if (!e)
-    return nullptr;
-  auto *node = e->getRegistry().get(bridge_id);
-  if (!node || node->type != wajuce::NodeType::WorkletBridge)
-    return nullptr;
-  auto *rb = (direction == 0)
-                 ? node->asWorkletBridge()->toIsolate->getChannel(channel)
-                 : node->asWorkletBridge()->fromIsolate->getChannel(channel);
+  auto *rb = getWorkletRingBuffer(bridge_id, direction, channel);
   return rb ? rb->getReadPosPtr() : nullptr;
 }
 
 FFI_PLUGIN_EXPORT int32_t *wajuce_worklet_get_write_pos_ptr(int32_t bridge_id,
                                                             int32_t direction,
                                                             int32_t channel) {
-  auto *e = wajuce::findEngineForNode(bridge_id);
-  if (!e)
-    return nullptr;
-  auto *node = e->getRegistry().get(bridge_id);
-  if (!node || node->type != wajuce::NodeType::WorkletBridge)
-    return nullptr;
-  auto *rb = (direction == 0)
-                 ? node->asWorkletBridge()->toIsolate->getChannel(channel)
-                 : node->asWorkletBridge()->fromIsolate->getChannel(channel);
+  auto *rb = getWorkletRingBuffer(bridge_id, direction, channel);
   return rb ? rb->getWritePosPtr() : nullptr;
+}
+
+FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_read_pos(int32_t bridge_id,
+                                                      int32_t direction,
+                                                      int32_t channel) {
+  auto *rb = getWorkletRingBuffer(bridge_id, direction, channel);
+  return rb ? rb->getReadPos() : 0;
+}
+
+FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_write_pos(int32_t bridge_id,
+                                                       int32_t direction,
+                                                       int32_t channel) {
+  auto *rb = getWorkletRingBuffer(bridge_id, direction, channel);
+  return rb ? rb->getWritePos() : 0;
+}
+
+FFI_PLUGIN_EXPORT void wajuce_worklet_set_read_pos(int32_t bridge_id,
+                                                   int32_t direction,
+                                                   int32_t channel,
+                                                   int32_t value) {
+  auto *rb = getWorkletRingBuffer(bridge_id, direction, channel);
+  if (rb)
+    rb->setReadPos(value);
+}
+
+FFI_PLUGIN_EXPORT void wajuce_worklet_set_write_pos(int32_t bridge_id,
+                                                    int32_t direction,
+                                                    int32_t channel,
+                                                    int32_t value) {
+  auto *rb = getWorkletRingBuffer(bridge_id, direction, channel);
+  if (rb)
+    rb->setWritePos(value);
 }
 
 FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_capacity(int32_t bridge_id) {
@@ -1035,6 +1176,12 @@ FFI_PLUGIN_EXPORT void wajuce_param_cancel(int32_t nid, const char *p,
   auto *e = wajuce::findEngineForNode(nid);
   if (e)
     e->paramCancel(nid, p, tc);
+}
+FFI_PLUGIN_EXPORT void wajuce_param_cancel_and_hold(int32_t nid, const char *p,
+                                                    double t) {
+  auto *e = wajuce::findEngineForNode(nid);
+  if (e)
+    e->paramCancelAndHold(nid, p, t);
 }
 
 FFI_PLUGIN_EXPORT void wajuce_osc_set_type(int32_t nid, int32_t t) {

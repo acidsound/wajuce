@@ -1,5 +1,5 @@
 // ignore_for_file: public_member_api_docs
-/// Stub for AudioIsolateManager — used on platforms where Dart isolates 
+/// Stub for AudioIsolateManager — used on platforms where Dart isolates
 /// are not used for audio processing (e.g. Web).
 library;
 
@@ -25,7 +25,7 @@ class AudioIsolateManager {
   }) async {
     // Register the callback from backend_web.dart
     // This connects the JS AudioWorklet 'tick' to this manager
-    backend.onWebProcessQuantum ??= _onProcessQuantum;
+    backend.onWebProcessQuantum = _onProcessQuantum;
   }
 
   void registerProcessor(String name, WAWorkletProcessor Function() factory) {
@@ -34,22 +34,24 @@ class AudioIsolateManager {
 
   void createNode(int nodeId, String processorName,
       {Map<String, double> paramDefaults = const {}, int? bridgeId}) {
+    _processorNodes.remove(nodeId)?.dispose();
+
     final factory = _factories[processorName];
     if (factory != null) {
       final processor = factory();
       processor.init(paramDefaults);
-      
+
       // Bind outgoing messages (Processor -> Main)
       processor.port.bind((data) {
         onProcessorMessage?.call(nodeId, data);
       });
-      
+
       _processorNodes[nodeId] = processor;
     }
   }
 
   void removeNode(int nodeId) {
-    _processorNodes.remove(nodeId);
+    _processorNodes.remove(nodeId)?.dispose();
   }
 
   void postMessage(int nodeId, dynamic data) {
@@ -58,10 +60,13 @@ class AudioIsolateManager {
   }
 
   Future<void> stop() async {
+    for (final processor in _processorNodes.values) {
+      processor.dispose();
+    }
     _processorNodes.clear();
-    // We don't clear the backend callback because other contexts might use it,
-    // although currently it's a global callback. 
-    // In a multi-context scenario this needs refinement, but sufficient for single context.
+    if (identical(backend.onWebProcessQuantum, _onProcessQuantum)) {
+      backend.onWebProcessQuantum = null;
+    }
   }
 
   // Driven by AudioWorklet (JS) -> Backend (Dart) -> Here
@@ -71,10 +76,17 @@ class AudioIsolateManager {
       // Create empty buffers for now as we are focusing on Logic/Clock
       // WAWorkletProcessor expects List<List<Float32List>> (Buses -> Channels -> Samples)
       // We simulate 1 bus with 2 channels (Stereo)
-      final inputs = [ [Float32List(128), Float32List(128)] ]; 
-      final outputs = [ [Float32List(128), Float32List(128)] ];
-      
-      processor.process(inputs, outputs, {});
+      final inputs = [
+        [Float32List(128), Float32List(128)]
+      ];
+      final outputs = [
+        [Float32List(128), Float32List(128)]
+      ];
+
+      final keepAlive = processor.process(inputs, outputs, {});
+      if (!keepAlive) {
+        _processorNodes.remove(nodeId)?.dispose();
+      }
     }
   }
 }

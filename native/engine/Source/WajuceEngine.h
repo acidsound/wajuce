@@ -78,6 +78,7 @@ public:
   void paramSetTarget(int32_t nodeId, const char *param, float target,
                       double startTime, float tc);
   void paramCancel(int32_t nodeId, const char *param, double cancelTime);
+  void paramCancelAndHold(int32_t nodeId, const char *param, double time);
 
   // Oscillator control
   void oscSetType(int32_t nodeId, int type);
@@ -126,7 +127,6 @@ private:
   std::unordered_map<int32_t, NodeID> idToGraphNode;
   std::mutex graphMtx;
 
-  ParamTimeline *getOrCreateTimeline(int32_t nodeId, const char *param);
   void processAutomation(double startTime, double sampleRate, int numSamples);
 
   struct FeedbackConnection {

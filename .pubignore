@@ -32,3 +32,13 @@ native/engine/vendor/JUCE/extras/AudioPluginHost/Builds/Android/app/src/main/ass
 **/CMakeFiles/
 **/cmake_install.cmake
 **/Makefile
+
+# Exclude local agent/workspace docs
+AGENTS.md
+SKILLS.md
+
+# Exclude local example artifacts
+example/build_log.txt
+example/ios_build_log.txt
+example/ios_sim_*.png
+example/running_demo.mp4

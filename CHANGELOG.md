@@ -1,3 +1,12 @@
+## 0.1.4
+
+* **AudioWorklet Ergonomics**: Added `WAWorkletModules`-based module loading flow and improved example usage so processor/module identifiers are encapsulated behind helper APIs.
+* **Sequencer Stability**: Reduced click/tick artifacts by improving parameter update scheduling (`cancelAndHoldAtTime`, warm-up parameter sync, smoother runtime updates).
+* **Delay Behavior**: Updated sequencer delay control to keep `DelayNode.delayTime` continuously synchronized (independent of wet bypass), avoiding first-enable jumps.
+* **Feedback Loop Fix**: Restored native machine-voice external feedback path (`Delay -> Gain -> Delay`) using a managed one-block feedback bridge in JUCE graph.
+* **Stereo/IO Fixes**: Corrected machine-voice internal routing to true stereo and improved mono microphone monitoring behavior on iOS.
+* **Release Hygiene**: Updated package metadata and publish configuration for cleaner pub.dev validation.
+
 ## 0.1.3
 
 * **Maintenance**: Improved pub.dev score by resolving all library and example analysis issues.

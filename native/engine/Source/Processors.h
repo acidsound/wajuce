@@ -221,7 +221,11 @@ public:
 
   void prepareToPlay(double sr, int) override {
     sampleRate = sr;
-    updateCoefficients();
+    smoothedFrequency = juce::jlimit(
+        10.0f, (float)(sampleRate * 0.45),
+        frequency.load(std::memory_order_relaxed));
+    smoothedQ = juce::jmax(0.0001f, Q.load(std::memory_order_relaxed));
+    updateCoefficients(smoothedFrequency, smoothedQ);
     for (auto &f : filters)
       f.reset();
   }
@@ -229,7 +233,17 @@ public:
 
   void processBlock(juce::AudioBuffer<float> &buf,
                     juce::MidiBuffer &) override {
-    updateCoefficients();
+    const float targetFreq = juce::jlimit(
+        10.0f, (float)(sampleRate * 0.45),
+        frequency.load(std::memory_order_relaxed));
+    const float targetQ = juce::jmax(0.0001f, Q.load(std::memory_order_relaxed));
+
+    // Smooth coefficient updates across blocks to reduce zipper/tick artifacts.
+    constexpr float smoothing = 0.2f;
+    smoothedFrequency += (targetFreq - smoothedFrequency) * smoothing;
+    smoothedQ += (targetQ - smoothedQ) * smoothing;
+
+    updateCoefficients(smoothedFrequency, smoothedQ);
     for (int ch = 0; ch < buf.getNumChannels(); ++ch) {
       float *data = buf.getWritePointer(ch);
       for (int i = 0; i < buf.getNumSamples(); ++i) {
@@ -238,16 +252,14 @@ public:
     }
   }
 
-  void updateCoefficients() {
-    juce::IIRCoefficients c = juce::IIRCoefficients::makeLowPass(
-        sampleRate, frequency.load(), Q.load());
+  void updateCoefficients(float freq, float q) {
+    juce::IIRCoefficients c =
+        juce::IIRCoefficients::makeLowPass(sampleRate, freq, q);
     int t = filterType.load();
     if (t == 1)
-      c = juce::IIRCoefficients::makeHighPass(sampleRate, frequency.load(),
-                                              Q.load());
+      c = juce::IIRCoefficients::makeHighPass(sampleRate, freq, q);
     else if (t == 2)
-      c = juce::IIRCoefficients::makeBandPass(sampleRate, frequency.load(),
-                                              Q.load());
+      c = juce::IIRCoefficients::makeBandPass(sampleRate, freq, q);
 
     for (auto &f : filters)
       f.setCoefficients(c);
@@ -271,6 +283,8 @@ public:
   std::atomic<float> gain{0.0f};
   std::atomic<int> filterType{0};
   double sampleRate = 44100.0;
+  float smoothedFrequency = 350.0f;
+  float smoothedQ = 1.0f;
   juce::IIRFilter filters[32];
 };
 
@@ -287,19 +301,32 @@ public:
                             juce::AudioChannelSet::discreteChannels(32))) {}
 
   const juce::String getName() const override { return "WAStereoPanner"; }
-  void prepareToPlay(double, int) override {}
+  void prepareToPlay(double, int) override {
+    lastPan = juce::jlimit(-1.0f, 1.0f, pan.load(std::memory_order_relaxed));
+  }
   void releaseResources() override {}
 
   void processBlock(juce::AudioBuffer<float> &buf,
                     juce::MidiBuffer &) override {
-    const float p = pan.load(std::memory_order_relaxed);
-    const float leftGain =
-        std::cos((p + 1.0f) * juce::MathConstants<float>::pi / 4.0f);
-    const float rightGain =
-        std::sin((p + 1.0f) * juce::MathConstants<float>::pi / 4.0f);
-    if (buf.getNumChannels() >= 2) {
-      buf.applyGain(0, 0, buf.getNumSamples(), leftGain);
-      buf.applyGain(1, 0, buf.getNumSamples(), rightGain);
+    if (buf.getNumChannels() >= 2 && buf.getNumSamples() > 0) {
+      const float targetPan = juce::jlimit(
+          -1.0f, 1.0f, pan.load(std::memory_order_relaxed));
+      const float panStep =
+          (targetPan - lastPan) / (float)buf.getNumSamples();
+      float currentPan = lastPan;
+
+      float *left = buf.getWritePointer(0);
+      float *right = buf.getWritePointer(1);
+      for (int i = 0; i < buf.getNumSamples(); ++i) {
+        const float leftGain = std::cos(
+            (currentPan + 1.0f) * juce::MathConstants<float>::pi / 4.0f);
+        const float rightGain = std::sin(
+            (currentPan + 1.0f) * juce::MathConstants<float>::pi / 4.0f);
+        left[i] *= leftGain;
+        right[i] *= rightGain;
+        currentPan += panStep;
+      }
+      lastPan = targetPan;
     }
   }
 
@@ -317,6 +344,7 @@ public:
   void setStateInformation(const void *, int) override {}
 
   std::atomic<float> pan{0.0f};
+  float lastPan{0.0f};
 };
 
 // ============================================================================
@@ -612,6 +640,7 @@ public:
     const int bufLen = buffer.getNumSamples();
     const int numChannels = buf.getNumChannels();
     const int numSamples = buf.getNumSamples();
+    const bool automated = isAutomated.load(std::memory_order_relaxed);
 
     // Resize if provided buffer is smaller than current processing block
     if (sampleAccurateDelayTimes.size() < (size_t)numSamples) {
@@ -624,7 +653,6 @@ public:
       int wPos = writePos;
 
       for (int i = 0; i < numSamples; ++i) {
-        bool automated = false; // Default to false for now as logic is missing
         const float currentDelaySeconds =
             automated ? sampleAccurateDelayTimes[i]
                       : delayTime.load(std::memory_order_relaxed);
@@ -643,9 +671,12 @@ public:
         // 2. Linear Interpolation
         float out = delayData[i1] + frac * (delayData[i2] - delayData[i1]);
 
-        // 3. Write to delay buffer with feedback
+        // 3. Write to delay buffer with feedback.
+        // DelayNode in Web Audio is usually used with an external feedback loop,
+        // but wajuce also exposes an experimental internal feedback param.
         float inSample = bufData[i];
-        float fb = 0.0f; // No internal feedback for standard DelayNode
+        float fb =
+            juce::jlimit(0.0f, 0.9995f, feedback.load(std::memory_order_relaxed));
         delayData[wPos] = inSample + out * fb;
 
         // 4. Output mix
@@ -831,7 +862,27 @@ public:
   void prepareToPlay(double, int) override {}
   void releaseResources() override {}
   void processBlock(juce::AudioBuffer<float> &buf,
-                    juce::MidiBuffer &) override {} // Pass-through
+                    juce::MidiBuffer &) override {
+    // If hardware input is mono (common on iOS), duplicate ch0 into ch1
+    // so monitoring path is centered on stereo outputs.
+    if (buf.getNumChannels() < 2 || buf.getNumSamples() <= 0)
+      return;
+
+    const float *left = buf.getReadPointer(0);
+    const float *rightIn = buf.getReadPointer(1);
+
+    bool rightHasSignal = false;
+    for (int i = 0; i < buf.getNumSamples(); ++i) {
+      if (std::abs(rightIn[i]) > 1.0e-7f) {
+        rightHasSignal = true;
+        break;
+      }
+    }
+
+    if (!rightHasSignal) {
+      buf.copyFrom(1, 0, left, buf.getNumSamples());
+    }
+  }
   double getTailLengthSeconds() const override { return 0; }
   bool acceptsMidi() const override { return false; }
   bool producesMidi() const override { return false; }

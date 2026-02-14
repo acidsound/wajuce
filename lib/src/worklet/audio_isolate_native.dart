@@ -11,6 +11,17 @@ import '../backend/backend.dart' as backend;
 
 const int quantumSize = 128;
 
+ffi.Pointer<ffi.Float> _toFloatPtr(dynamic rawPtr) {
+  if (rawPtr is ffi.Pointer<ffi.Float>) {
+    return rawPtr;
+  }
+  if (rawPtr is int) {
+    return ffi.Pointer<ffi.Float>.fromAddress(rawPtr);
+  }
+  throw StateError(
+      'Invalid worklet buffer pointer type: ${rawPtr.runtimeType}');
+}
+
 class BridgedNodeInfo {
   final int nodeId;
   final WAWorkletProcessor processor;
@@ -30,42 +41,49 @@ class BridgedNodeInfo {
 }
 
 BridgedNodeInfo? setupBridgedNode(int bridgeId, WAWorkletProcessor processor) {
-   try {
-     final capacity = backend.workletGetCapacity(bridgeId);
-     if (capacity <= 0) return null;
+  try {
+    final capacity = backend.workletGetCapacity(bridgeId);
+    if (capacity <= 0) return null;
 
-     const numInputs = 2; 
-     const numOutputs = 2;
+    const numInputs = 2;
+    const numOutputs = 2;
 
-     final toChannels = <RingBuffer>[];
-     for (int i = 0; i < numInputs; i++) {
-        toChannels.add(NativeRingBuffer(
-           capacity,
-           ffi.Pointer<ffi.Float>.fromAddress(backend.workletGetBufferPtr(bridgeId, 0, i)),
-           ffi.Pointer<ffi.Int32>.fromAddress(backend.workletGetReadPosPtr(bridgeId, 0, i)),
-           ffi.Pointer<ffi.Int32>.fromAddress(backend.workletGetWritePosPtr(bridgeId, 0, i)),
-        ));
-     }
+    final toChannels = <RingBuffer>[];
+    for (int i = 0; i < numInputs; i++) {
+      toChannels.add(NativeRingBuffer(
+        capacity,
+        _toFloatPtr(backend.workletGetBufferPtr(bridgeId, 0, i)),
+        getReadPos: () => backend.workletGetReadPos(bridgeId, 0, i),
+        getWritePos: () => backend.workletGetWritePos(bridgeId, 0, i),
+        setReadPos: (value) => backend.workletSetReadPos(bridgeId, 0, i, value),
+        setWritePos: (value) =>
+            backend.workletSetWritePos(bridgeId, 0, i, value),
+      ));
+    }
 
-     final fromChannels = <RingBuffer>[];
-     for (int i = 0; i < numOutputs; i++) {
-        fromChannels.add(NativeRingBuffer(
-           capacity,
-           ffi.Pointer<ffi.Float>.fromAddress(backend.workletGetBufferPtr(bridgeId, 1, i)),
-           ffi.Pointer<ffi.Int32>.fromAddress(backend.workletGetReadPosPtr(bridgeId, 1, i)),
-           ffi.Pointer<ffi.Int32>.fromAddress(backend.workletGetWritePosPtr(bridgeId, 1, i)),
-        ));
-     }
+    final fromChannels = <RingBuffer>[];
+    for (int i = 0; i < numOutputs; i++) {
+      fromChannels.add(NativeRingBuffer(
+        capacity,
+        _toFloatPtr(backend.workletGetBufferPtr(bridgeId, 1, i)),
+        getReadPos: () => backend.workletGetReadPos(bridgeId, 1, i),
+        getWritePos: () => backend.workletGetWritePos(bridgeId, 1, i),
+        setReadPos: (value) => backend.workletSetReadPos(bridgeId, 1, i, value),
+        setWritePos: (value) =>
+            backend.workletSetWritePos(bridgeId, 1, i, value),
+      ));
+    }
 
-     return BridgedNodeInfo(
-        nodeId: bridgeId,
-        processor: processor,
-        toIsolate: MultiChannelNativeRingBuffer(numInputs, capacity, toChannels),
-        fromIsolate: MultiChannelNativeRingBuffer(numOutputs, capacity, fromChannels),
-        inputs: [List.generate(numInputs, (_) => Float32List(quantumSize))],
-        outputs: [List.generate(numOutputs, (_) => Float32List(quantumSize))],
-     );
-   } catch (e) {
-     return null;
-   }
+    return BridgedNodeInfo(
+      nodeId: bridgeId,
+      processor: processor,
+      toIsolate: MultiChannelNativeRingBuffer(numInputs, capacity, toChannels),
+      fromIsolate:
+          MultiChannelNativeRingBuffer(numOutputs, capacity, fromChannels),
+      inputs: [List.generate(numInputs, (_) => Float32List(quantumSize))],
+      outputs: [List.generate(numOutputs, (_) => Float32List(quantumSize))],
+    );
+  } catch (e) {
+    return null;
+  }
 }

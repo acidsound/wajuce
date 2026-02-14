@@ -43,6 +43,7 @@ export 'src/nodes/periodic_wave.dart';
 
 // Worklet
 export 'src/worklet/wa_worklet.dart';
+export 'src/worklet/wa_worklet_module.dart';
 export 'src/worklet/wa_worklet_node.dart';
 export 'src/worklet/wa_worklet_processor.dart';
 

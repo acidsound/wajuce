@@ -49,7 +49,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _initEngine() async {
     _ctx?.close();
-    final ctx = WAContext(bufferSize: _bufferSize); 
+    final ctx = WAContext(bufferSize: _bufferSize);
     await ctx.resume();
     setState(() => _ctx = ctx);
   }
@@ -88,7 +88,8 @@ class _MainScreenState extends State<MainScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange,
                   foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 ),
               ),
             ],
@@ -112,10 +113,14 @@ class _MainScreenState extends State<MainScreen> {
                     _bufferSize = val;
                     _ctx = null; // Show loading
                   });
-                  Future.delayed(const Duration(milliseconds: 100), _initEngine);
+                  Future.delayed(
+                      const Duration(milliseconds: 100), _initEngine);
                 }
               },
-              itemBuilder: (context) => [256, 512, 1024].map((s) => PopupMenuItem(value: s, child: Text('Buffer: $s'))).toList(),
+              itemBuilder: (context) => [256, 512, 1024]
+                  .map(
+                      (s) => PopupMenuItem(value: s, child: Text('Buffer: $s')))
+                  .toList(),
             ),
           ],
           bottom: const TabBar(
@@ -152,7 +157,7 @@ class _SynthPadScreenState extends State<SynthPadScreen> {
   WAOscillatorNode? _osc;
   WAGainNode? _gain;
   WAOscillatorType _type = WAOscillatorType.custom;
-  
+
   double _currentFreq = 440.0;
   double _currentGain = 0.0;
 
@@ -166,17 +171,17 @@ class _SynthPadScreenState extends State<SynthPadScreen> {
     _osc = widget.ctx.createOscillator();
     // For custom type, we must setPeriodicWave
     if (_type == WAOscillatorType.custom) {
-        _setCustomWave();
+      _setCustomWave();
     } else {
-        _osc!.type = _type;
+      _osc!.type = _type;
     }
-    
+
     _gain = widget.ctx.createGain();
     _gain!.gain.value = 0;
 
     _osc!.connect(_gain!);
     _gain!.connect(widget.ctx.destination);
-    
+
     _osc!.start();
   }
 
@@ -192,24 +197,23 @@ class _SynthPadScreenState extends State<SynthPadScreen> {
     double normY = 1.0 - (localPos.dy / size.height).clamp(0.0, 1.0);
 
     // Freq 50..5000 (Log scale approximate)
-    double freq = 50.0 *  pow(100.0, normX); 
+    double freq = 50.0 * pow(100.0, normX);
 
     final now = widget.ctx.currentTime;
-    
+
     _osc?.frequency.setTargetAtTime(freq, now, 0.02);
     _gain?.gain.setTargetAtTime(normY, now, 0.02);
-    
+
     setState(() {
       _currentFreq = freq;
       _currentGain = normY;
     });
   }
-  
-  
+
   void _onPanStart(DragStartDetails d, BoxConstraints c) {
     _handleInput(d.localPosition, Size(c.maxWidth, c.maxHeight));
   }
-  
+
   void _onPanUpdate(DragUpdateDetails d, BoxConstraints c) {
     _handleInput(d.localPosition, Size(c.maxWidth, c.maxHeight));
   }
@@ -226,7 +230,7 @@ class _SynthPadScreenState extends State<SynthPadScreen> {
     final imag = Float32List(harmonicCount);
 
     for (int i = 1; i < harmonicCount; i++) {
-        imag[i] = 1.0 / i; 
+      imag[i] = 1.0 / i;
     }
 
     final wave = WAPeriodicWave(real: real, imag: imag);
@@ -244,7 +248,9 @@ class _SynthPadScreenState extends State<SynthPadScreen> {
               const Text("Wave: "),
               DropdownButton<WAOscillatorType>(
                 value: _type,
-                items: WAOscillatorType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.name))).toList(),
+                items: WAOscillatorType.values
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t.name)))
+                    .toList(),
                 onChanged: (v) {
                   setState(() {
                     _type = v!;
@@ -294,12 +300,15 @@ class PadPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (gain > 0.01) {
-      final paint = Paint()..color = Colors.orangeAccent.withValues(alpha: 0.3 + gain * 0.7);
+      final paint = Paint()
+        ..color = Colors.orangeAccent.withValues(alpha: 0.3 + gain * 0.7);
       // X position based on freq is hard to reverse, just draw where touch is roughly?
       // Actually we don't have touch pos here. Just draw a circle in center with size = gain.
-      canvas.drawCircle(Offset(size.width * 0.5, size.height * 0.5), gain * 100 + 10, paint);
+      canvas.drawCircle(
+          Offset(size.width * 0.5, size.height * 0.5), gain * 100 + 10, paint);
     }
   }
+
   @override
   bool shouldRepaint(PadPainter old) => old.gain != gain || old.freq != freq;
 }
@@ -352,13 +361,16 @@ class _DrumPadScreenState extends State<DrumPadScreen> {
     }
     setState(() {
       _selectedInput = input;
-      _lastMidiMsg = input == null ? 'MIDI monitoring disabled' : 'Monitoring ${input.name}';
+      _lastMidiMsg = input == null
+          ? 'MIDI monitoring disabled'
+          : 'Monitoring ${input.name}';
     });
     if (input != null) {
       input.onMessage = (data, ts) {
         if (mounted) {
           setState(() {
-            _lastMidiMsg = 'Msg: ${data.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}';
+            _lastMidiMsg =
+                'Msg: ${data.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}';
           });
         }
         // Play sample on Note On
@@ -413,10 +425,10 @@ class _DrumPadScreenState extends State<DrumPadScreen> {
     // Dispose after play (approximate duration)
     Future.delayed(
         Duration(
-            milliseconds: ((_sampleBuffer!.length / _sampleBuffer!.sampleRate) *
-                        1000 +
-                    500)
-                .toInt()), () {
+            milliseconds:
+                ((_sampleBuffer!.length / _sampleBuffer!.sampleRate) * 1000 +
+                        500)
+                    .toInt()), () {
       source.dispose();
       panner.dispose();
       gain.dispose();
@@ -447,7 +459,8 @@ class _DrumPadScreenState extends State<DrumPadScreen> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.orange.withValues(alpha: 0.5), blurRadius: 30),
+                      color: Colors.orange.withValues(alpha: 0.5),
+                      blurRadius: 30),
                 ],
               ),
               child: const Center(
@@ -587,30 +600,23 @@ class MachineVoicePool {
     // 1. Try to get from pool
     if (_spares.isNotEmpty) {
       final v = _spares.removeLast();
-      v.panner.connect(output);
-      v.delayWet.connect(output);
       _ensureReplenish();
       return v;
     }
 
-    // 2. Pool empty? Create one immediately (Batch is fast)
-    // We assume batch creation is fast enough to not cause jank (~0.1ms)
-    // But we still wrap in Future to keep API consistent and allow microtask if needed.
+    // 2. Pool empty? Create one immediately.
+    // Keep API async-compatible for call sites.
     debugPrint("Pool empty! Creating batch voice...");
     final v = _createBatch();
-    
-    v.panner.connect(output);
-    v.delayWet.connect(output);
-    
+
     _ensureReplenish(); // Schedule replenishment
     return v;
   }
 
-  // Synchronous batch creation helper
   MachineVoice _createBatch() {
     try {
       final nodes = ctx.createMachineVoice();
-      return MachineVoice(
+      final voice = MachineVoice(
         osc: nodes[0] as WAOscillatorNode,
         filter: nodes[1] as WABiquadFilterNode,
         gain: nodes[2] as WAGainNode,
@@ -619,6 +625,9 @@ class MachineVoicePool {
         delayFb: nodes[5] as WAGainNode,
         delayWet: nodes[6] as WAGainNode,
       );
+      voice.panner.connect(output);
+      voice.delayWet.connect(output);
+      return voice;
     } catch (e) {
       // Fallback for Web or platforms where batch creation is not implemented
       final osc = ctx.createOscillator();
@@ -629,18 +638,22 @@ class MachineVoicePool {
       final delay = ctx.createDelay();
       final delayFb = ctx.createGain();
       final delayWet = ctx.createGain();
+      delayFb.gain.value = 0; // Delay feedback starts disabled
+      delayWet.gain.value = 0; // Delay wet mix starts disabled
 
       // Basic routing for machine voice
       osc.connect(filter);
       filter.connect(gain);
       gain.connect(panner);
-      
+
       // Delay routing
       gain.connect(delay);
       delay.connect(delayFb);
       delayFb.connect(delay);
       delay.connect(delayWet);
 
+      panner.connect(output);
+      delayWet.connect(output);
       osc.start();
 
       return MachineVoice(
@@ -660,26 +673,28 @@ class MachineVoicePool {
     if (_spares.length >= target) return;
 
     _isReplenishing = true;
-    
+
     // Fill pool using microtasks to avoid blocking frame
-    Future(() async { // Use Future instead of microtask for better yielding
+    Future(() {
+      // Use Future instead of microtask for better yielding
       try {
         if (_disposed) return;
-        
+
         final stopwatch = Stopwatch()..start();
         final v = _createBatch();
         stopwatch.stop();
         debugPrint("Batch voice created in ${stopwatch.elapsedMicroseconds}us");
-        
+
         _spares.add(v);
       } catch (e) {
         debugPrint("Replenish error: $e");
       } finally {
         _isReplenishing = false;
         if (!_disposed && _spares.length < target) {
-           // Schedule next batch with a slight delay if needed, 
-           // but Future() already goes to the end of event queue.
-           _ensureReplenish(target: target);
+          // Schedule next batch with a slight delay if needed,
+          // and yield a frame to keep UI responsive.
+          Future.delayed(const Duration(milliseconds: 16),
+              () => _ensureReplenish(target: target));
         }
       }
     });
@@ -687,23 +702,15 @@ class MachineVoicePool {
 
   // Deprecated: Only use if absolutely necessary
   MachineVoice getVoiceSync() {
-     if (_spares.isNotEmpty) {
+    if (_spares.isNotEmpty) {
       final v = _spares.removeLast();
-      v.panner.connect(output);
-      v.delayWet.connect(output);
-      
       _ensureReplenish();
       return v;
     }
-    debugPrint("WARNGING: Pool empty, creating synchronously (May cause glitches/crash)");
-    return _createSync();
-  }
-
-  // Deprecated: Just calls batch.
-  MachineVoice _createSync() {
+    debugPrint(
+        "WARNGING: Pool empty, creating synchronously (May cause glitches/crash)");
     final v = _createBatch();
-    v.panner.connect(output);
-    v.delayWet.connect(output);
+    _ensureReplenish();
     return v;
   }
 }
@@ -712,21 +719,31 @@ class MachineState {
   final int id;
   // final WAContext ctx; // Removed, handled by Voice/Pool
   // final WAGainNode output; // Removed
-  
-  double frequency = 440; 
-  double decay = 0.5; 
+
+  double frequency = 440;
+  double decay = 0.5;
   WAOscillatorType waveType = WAOscillatorType.sine;
   WABiquadFilterType filterType = WABiquadFilterType.lowpass;
   double pan = 0.0;
-  double cutoff = 2000; 
+  double cutoff = 2000;
   double resonance = 1;
   double delayTime = 0.3;
   double delayFeedback = 0.3;
-  double delayMix = 0.5; 
+  double delayMix = 0.5;
   bool delayEnabled = false;
   List<bool> steps = List.generate(16, (i) => i % 4 == 0);
 
   final MachineVoice? _voice;
+  WAOscillatorType? _lastWaveType;
+  WABiquadFilterType? _lastFilterType;
+  double _lastFrequency = double.nan;
+  double _lastCutoff = double.nan;
+  double _lastResonance = double.nan;
+  double _lastPan = double.nan;
+  double _lastDelayTime = double.nan;
+  double _lastDelayFeedback = double.nan;
+  double _lastDelayMix = double.nan;
+  bool _lastDelayEnabled = false;
 
   MachineState(this.id, MachineVoice voice) : _voice = voice;
 
@@ -749,6 +766,7 @@ class _SequencerScreenState extends State<SequencerScreen> {
   MachineVoicePool? _pool;
 
   WAWorkletNode? _clockNode;
+  WAGainNode? _clockSink;
 
   @override
   void initState() {
@@ -756,48 +774,46 @@ class _SequencerScreenState extends State<SequencerScreen> {
     _masterOutput = widget.ctx.createGain();
     _masterOutput!.gain.value = _masterGain;
     _masterOutput!.connect(widget.ctx.destination);
-    
+
     _pool = MachineVoicePool(widget.ctx, _masterOutput!);
     // Pre-warm the pool effectively in background
-    _pool!.prepare(2); 
+    _pool!.prepare(2);
 
     // Initial machine
     Future.delayed(const Duration(milliseconds: 100), _addMachine);
-    
+
     _initClock();
   }
 
-
   Future<void> _initClock() async {
-    // ... existing clock init ...
-    // Note: Re-using existing method body below, not replacing it here
-    widget.ctx.audioWorklet.registerProcessor('clock-processor', () => ClockProcessor());
-    await widget.ctx.audioWorklet.addModule('clock-processor');
-    
-    
-    _clockNode = widget.ctx.createWorkletNode(
-      'clock-processor',
-      parameterDefaults: {'sampleRate': 44100.0},
-    );
+    await loadClockWorkletModule(widget.ctx);
+
+    _clockNode?.dispose();
+    _clockSink?.dispose();
+
+    _clockNode = createClockWorkletNode(widget.ctx);
 
     // CRITICAL FIX: Web AudioWorklet must be connected to be active!
     // We connect it to a dummy silent gain to force the browser to run the processor.
-    final dummyGain = widget.ctx.createGain();
-    dummyGain.gain.value = 0.0;
-    _clockNode!.connect(dummyGain);
-    dummyGain.connect(widget.ctx.destination);
-    
+    _clockSink = widget.ctx.createGain();
+    _clockSink!.gain.value = 0.0;
+    _clockNode!.connect(_clockSink!);
+    _clockSink!.connect(widget.ctx.destination);
+
     _clockNode!.port.onMessage = (data) {
-      if (data['type'] == 'tick') {
-        _onTick(data['step']);
+      if (data is Map && data['type'] == 'tick') {
+        final step = (data['step'] as num?)?.toInt();
+        if (step == null) return;
+        final scheduledTime = (data['time'] as num?)?.toDouble();
+        _onTick(step, scheduledTime);
       }
     };
   }
 
   @override
   void dispose() {
-    _clockNode?.disconnect();
-    // We should also dispose the dummy gain, but for invalidation scoping simplistic here.
+    _clockNode?.dispose();
+    _clockSink?.dispose();
     _pool?.dispose();
     for (final m in _machines) {
       m.dispose();
@@ -810,23 +826,29 @@ class _SequencerScreenState extends State<SequencerScreen> {
 
   void _addMachine() async {
     if (!mounted || _isAddingMachine) return;
-    
+
     setState(() => _isAddingMachine = true);
-    
+
     try {
       // Use async creation to avoid blocking main thread & audio thread lock contention
       final voice = await _pool!.getVoiceAsync();
-      
+
       if (!mounted) {
         voice.dispose();
         return;
       }
 
+      late final MachineState machine;
       setState(() {
-        final m = MachineState(_machines.length, voice);
-        _machines.add(m);
+        machine = MachineState(_machines.length, voice);
+        _machines.add(machine);
         _isAddingMachine = false;
       });
+      _applyMachineRealtimeParams(
+        machine,
+        atTime: widget.ctx.currentTime + 0.002,
+        force: true,
+      );
     } catch (e) {
       debugPrint("Error adding machine: $e");
       if (mounted) setState(() => _isAddingMachine = false);
@@ -838,7 +860,14 @@ class _SequencerScreenState extends State<SequencerScreen> {
       _isPlaying = !_isPlaying;
       if (_isPlaying) {
         _currentStep = 0;
-        _clockNode?.port.postMessage({'type': 'start'});
+        final warmupTime = widget.ctx.currentTime + 0.004;
+        for (final m in _machines) {
+          _applyMachineRealtimeParams(m, atTime: warmupTime, force: true);
+        }
+        _clockNode?.port.postMessage({
+          'type': 'start',
+          'contextTime': widget.ctx.currentTime,
+        });
         _clockNode?.port.postMessage({'type': 'bpm', 'value': _bpm});
       } else {
         _clockNode?.port.postMessage({'type': 'stop'});
@@ -847,49 +876,117 @@ class _SequencerScreenState extends State<SequencerScreen> {
     });
   }
 
-  void _onTick(int step) {
-     if (!mounted) return;
-     setState(() {
-       _currentStep = step;
-       final now = widget.ctx.currentTime;
-       for (var m in _machines) {
-         if (m.steps[step]) {
-            _playMachine(m, now);
-         }
-       }
-     });
+  void _applyMachineRealtimeParams(MachineState m,
+      {double? atTime, bool force = false}) {
+    final v = m._voice;
+    if (v == null) return;
+
+    final now = widget.ctx.currentTime;
+    final t = atTime ?? (now + 0.002);
+
+    if (force || m._lastWaveType != m.waveType) {
+      v.osc.type = m.waveType;
+      m._lastWaveType = m.waveType;
+    }
+    if (force ||
+        (m.frequency - m._lastFrequency).abs() > 0.0001 ||
+        m._lastFrequency.isNaN) {
+      v.osc.frequency.setTargetAtTime(m.frequency, t, 0.010);
+      m._lastFrequency = m.frequency;
+    }
+
+    if (force || m._lastFilterType != m.filterType) {
+      v.filter.type = m.filterType;
+      m._lastFilterType = m.filterType;
+    }
+    if (force ||
+        (m.cutoff - m._lastCutoff).abs() > 0.0001 ||
+        m._lastCutoff.isNaN) {
+      v.filter.frequency.setTargetAtTime(m.cutoff, t, 0.012);
+      m._lastCutoff = m.cutoff;
+    }
+    if (force ||
+        (m.resonance - m._lastResonance).abs() > 0.0001 ||
+        m._lastResonance.isNaN) {
+      v.filter.Q.setTargetAtTime(m.resonance, t, 0.012);
+      m._lastResonance = m.resonance;
+    }
+    if (force || (m.pan - m._lastPan).abs() > 0.0001 || m._lastPan.isNaN) {
+      v.panner.pan.setTargetAtTime(m.pan, t, 0.015);
+      m._lastPan = m.pan;
+    }
+
+    // DelayNode delayTime is a regular AudioParam regardless of bypass/mix state.
+    // Keep it updated continuously so enabling wet path doesn't cause first-hit jumps.
+    if (force ||
+        (m.delayTime - m._lastDelayTime).abs() > 0.0001 ||
+        m._lastDelayTime.isNaN) {
+      if (force || m._lastDelayTime.isNaN) {
+        v.delay.delayTime.cancelAndHoldAtTime(t);
+        v.delay.delayTime.setValueAtTime(m.delayTime, t);
+      } else {
+        v.delay.delayTime.setTargetAtTime(m.delayTime, t, 0.12);
+      }
+      m._lastDelayTime = m.delayTime;
+    }
+
+    // Wet/feedback gains are the bypass control for this example graph.
+    if (m.delayEnabled) {
+      final isDelayEntering = force || !m._lastDelayEnabled;
+
+      if (isDelayEntering ||
+          (m.delayFeedback - m._lastDelayFeedback).abs() > 0.0001 ||
+          m._lastDelayFeedback.isNaN) {
+        v.delayFb.gain.setTargetAtTime(m.delayFeedback, t, 0.09);
+        m._lastDelayFeedback = m.delayFeedback;
+      }
+
+      if (isDelayEntering ||
+          (m.delayMix - m._lastDelayMix).abs() > 0.0001 ||
+          m._lastDelayMix.isNaN) {
+        v.delayWet.gain.setTargetAtTime(m.delayMix, t, 0.08);
+        m._lastDelayMix = m.delayMix;
+      }
+      m._lastDelayEnabled = true;
+    } else {
+      if (force || m._lastDelayEnabled) {
+        v.delayFb.gain.setTargetAtTime(0, t, 0.08);
+        v.delayWet.gain.setTargetAtTime(0, t, 0.06);
+      }
+      m._lastDelayEnabled = false;
+    }
+  }
+
+  void _onTick(int step, [double? scheduledTime]) {
+    if (!mounted) return;
+    final now = widget.ctx.currentTime;
+    final triggerTime =
+        scheduledTime == null ? (now + 0.004) : max(scheduledTime, now + 0.004);
+
+    for (var m in _machines) {
+      if (m.steps[step]) {
+        _playMachine(m, triggerTime);
+      }
+    }
+
+    if (_currentStep != step) {
+      setState(() {
+        _currentStep = step;
+      });
+    }
   }
 
   void _playMachine(MachineState m, double time) {
     m.ensureVoice();
     final v = m._voice!;
 
-    // Update real-time parameters
-    v.osc.type = m.waveType;
-    v.osc.frequency.setValueAtTime(m.frequency, time);
-    
-    v.filter.type = m.filterType;
-    v.filter.frequency.setValueAtTime(m.cutoff, time);
-    v.filter.Q.setValueAtTime(m.resonance, time);
+    // Keep voice params warm with slightly longer smoothing to reduce ticks.
+    _applyMachineRealtimeParams(m, atTime: time);
 
-    // Trigger Envelope (Smooth using setTargetAtTime)
-    v.gain.gain.cancelScheduledValues(time);
-    // Attack: Reach 0.6 smoothly (approx 15ms to avoid clicks)
-    v.gain.gain.setTargetAtTime(0.6, time, 0.015);
-    // Decay: Decay to silence
-    v.gain.gain.setTargetAtTime(0.001, time + 0.040, m.decay);
-
-    v.panner.pan.setValueAtTime(m.pan, time);
-
-    // Update Delay Params — external feedback via FeedbackBridge
-    if (m.delayEnabled) {
-      v.delay.delayTime.setValueAtTime(m.delayTime, time);
-      v.delayFb.gain.setValueAtTime(m.delayFeedback, time);
-      v.delayWet.gain.setValueAtTime(m.delayMix, time);
-    } else {
-      v.delayFb.gain.setValueAtTime(0, time);
-      v.delayWet.gain.setValueAtTime(0, time);
-    }
+    // Retrigger envelope without hard discontinuity.
+    v.gain.gain.cancelAndHoldAtTime(time);
+    v.gain.gain.setTargetAtTime(0.45, time, 0.004);
+    v.gain.gain.setTargetAtTime(0.0001, time + 0.022, max(0.008, m.decay));
   }
 
   @override
@@ -928,7 +1025,16 @@ class _SequencerScreenState extends State<SequencerScreen> {
                   value: _bpm,
                   min: 60,
                   max: 200,
-                  onChanged: (v) => setState(() => _bpm = v),
+                  onChanged: (v) {
+                    setState(() => _bpm = v);
+                    if (_isPlaying) {
+                      _clockNode?.port.postMessage({'type': 'bpm', 'value': v});
+                      _clockNode?.port.postMessage({
+                        'type': 'syncTime',
+                        'contextTime': widget.ctx.currentTime,
+                      });
+                    }
+                  },
                 ),
               ),
               Text(_bpm.toInt().toString()),
@@ -944,10 +1050,15 @@ class _SequencerScreenState extends State<SequencerScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: ElevatedButton.icon(
                     onPressed: _isAddingMachine ? null : _addMachine,
-                    icon: _isAddingMachine 
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) 
-                      : const Icon(Icons.add),
-                    label: Text(_isAddingMachine ? ' BUILDING NODES...' : 'ADD MACHINE'),
+                    icon: _isAddingMachine
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.add),
+                    label: Text(_isAddingMachine
+                        ? ' BUILDING NODES...'
+                        : 'ADD MACHINE'),
                   ),
                 );
               }
@@ -955,7 +1066,10 @@ class _SequencerScreenState extends State<SequencerScreen> {
               return _MachineView(
                 state: m,
                 currentStep: _currentStep,
-                onChanged: () => setState(() {}),
+                onChanged: () {
+                  _applyMachineRealtimeParams(m);
+                  setState(() {});
+                },
                 onDelete: () {
                   _machines[index].dispose();
                   setState(() => _machines.removeAt(index));
@@ -975,7 +1089,11 @@ class _MachineView extends StatelessWidget {
   final VoidCallback onChanged;
   final VoidCallback onDelete;
 
-  const _MachineView({required this.state, required this.currentStep, required this.onChanged, required this.onDelete});
+  const _MachineView(
+      {required this.state,
+      required this.currentStep,
+      required this.onChanged,
+      required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -987,7 +1105,8 @@ class _MachineView extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text('Synth #${state.id + 1}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text('Synth #${state.id + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 const Spacer(),
                 DropdownButton<WAOscillatorType>(
                   value: state.waveType,
@@ -1018,18 +1137,60 @@ class _MachineView extends StatelessWidget {
                     }
                   },
                 ),
-                IconButton(onPressed: onDelete, icon: const Icon(Icons.close, size: 20, color: Colors.grey)),
+                IconButton(
+                    onPressed: onDelete,
+                    icon:
+                        const Icon(Icons.close, size: 20, color: Colors.grey)),
               ],
             ),
-            _SliderRow(label: 'Freq', value: state.frequency, min: 20, max: 2000, onChanged: (v) { state.frequency = v; onChanged(); }),
-            _SliderRow(label: 'Decay', value: state.decay, min: 0.01, max: 1.0, isSeconds: true, onChanged: (v) { state.decay = v; onChanged(); }),
-            _SliderRow(label: 'Cutoff', value: state.cutoff, min: 50, max: 10000, onChanged: (v) { state.cutoff = v; onChanged(); }),
-            _SliderRow(label: 'Res', value: state.resonance, min: 0, max: 20, onChanged: (v) { state.resonance = v; onChanged(); }),
+            _SliderRow(
+                label: 'Freq',
+                value: state.frequency,
+                min: 20,
+                max: 2000,
+                onChanged: (v) {
+                  state.frequency = v;
+                  onChanged();
+                }),
+            _SliderRow(
+                label: 'Decay',
+                value: state.decay,
+                min: 0.01,
+                max: 1.0,
+                isSeconds: true,
+                onChanged: (v) {
+                  state.decay = v;
+                  onChanged();
+                }),
+            _SliderRow(
+                label: 'Cutoff',
+                value: state.cutoff,
+                min: 50,
+                max: 10000,
+                onChanged: (v) {
+                  state.cutoff = v;
+                  onChanged();
+                }),
+            _SliderRow(
+                label: 'Res',
+                value: state.resonance,
+                min: 0,
+                max: 20,
+                onChanged: (v) {
+                  state.resonance = v;
+                  onChanged();
+                }),
             Row(
               children: [
                 SizedBox(
-                  height: 24, width: 24,
-                  child: Checkbox(value: state.delayEnabled, onChanged: (v) { state.delayEnabled = v ?? false; onChanged(); }),
+                  height: 24,
+                  width: 24,
+                  child: Checkbox(
+                      value: state.delayEnabled,
+                      onChanged: (v) {
+                        state.delayEnabled = v ?? false;
+                        onChanged();
+                      }),
                 ),
                 const Text(' Delay ', style: TextStyle(fontSize: 12)),
                 Expanded(
@@ -1038,21 +1199,39 @@ class _MachineView extends StatelessWidget {
                       _SliderRow(
                         label: 'Time',
                         value: state.delayTime,
-                        min: 0, max: 1,
+                        min: 0,
+                        max: 1,
                         isSeconds: true,
-                        onChanged: state.delayEnabled ? (v) { state.delayTime = v; onChanged(); } : (v){},
+                        onChanged: state.delayEnabled
+                            ? (v) {
+                                state.delayTime = v;
+                                onChanged();
+                              }
+                            : (v) {},
                       ),
                       _SliderRow(
                         label: 'Fdbk',
                         value: state.delayFeedback,
-                        min: 0, max: 0.95,
-                        onChanged: state.delayEnabled ? (v) { state.delayFeedback = v; onChanged(); } : (v){},
+                        min: 0,
+                        max: 0.95,
+                        onChanged: state.delayEnabled
+                            ? (v) {
+                                state.delayFeedback = v;
+                                onChanged();
+                              }
+                            : (v) {},
                       ),
                       _SliderRow(
                         label: 'Mix',
                         value: state.delayMix,
-                        min: 0, max: 1,
-                        onChanged: state.delayEnabled ? (v) { state.delayMix = v; onChanged(); } : (v){},
+                        min: 0,
+                        max: 1,
+                        onChanged: state.delayEnabled
+                            ? (v) {
+                                state.delayMix = v;
+                                onChanged();
+                              }
+                            : (v) {},
                       ),
                     ],
                   ),
@@ -1063,9 +1242,19 @@ class _MachineView extends StatelessWidget {
             // 16 steps in 8x2 grid
             Column(
               children: [
-                _StepRow(steps: state.steps, start: 0, count: 8, currentStep: currentStep, onChanged: onChanged),
+                _StepRow(
+                    steps: state.steps,
+                    start: 0,
+                    count: 8,
+                    currentStep: currentStep,
+                    onChanged: onChanged),
                 const SizedBox(height: 4),
-                _StepRow(steps: state.steps, start: 8, count: 8, currentStep: currentStep, onChanged: onChanged),
+                _StepRow(
+                    steps: state.steps,
+                    start: 8,
+                    count: 8,
+                    currentStep: currentStep,
+                    onChanged: onChanged),
               ],
             ),
           ],
@@ -1082,7 +1271,12 @@ class _StepRow extends StatelessWidget {
   final int currentStep;
   final VoidCallback onChanged;
 
-  const _StepRow({required this.steps, required this.start, required this.count, required this.currentStep, required this.onChanged});
+  const _StepRow(
+      {required this.steps,
+      required this.start,
+      required this.count,
+      required this.currentStep,
+      required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -1106,9 +1300,21 @@ class _StepRow extends StatelessWidget {
                 color: isActive ? Colors.white : Colors.white10,
                 width: isActive ? 2 : 1,
               ),
-              boxShadow: isActive ? [BoxShadow(color: Colors.white.withValues(alpha: 0.5), blurRadius: 4)] : null,
+              boxShadow: isActive
+                  ? [
+                      BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          blurRadius: 4)
+                    ]
+                  : null,
             ),
-            child: Center(child: Text('${idx + 1}', style: TextStyle(fontSize: 8, color: isActive ? Colors.white : Colors.white54, fontWeight: isActive ? FontWeight.bold : FontWeight.normal))),
+            child: Center(
+                child: Text('${idx + 1}',
+                    style: TextStyle(
+                        fontSize: 8,
+                        color: isActive ? Colors.white : Colors.white54,
+                        fontWeight:
+                            isActive ? FontWeight.bold : FontWeight.normal))),
           ),
         );
       }),
@@ -1124,7 +1330,13 @@ class _SliderRow extends StatelessWidget {
   final bool isSeconds;
   final ValueChanged<double> onChanged;
 
-  const _SliderRow({required this.label, required this.value, required this.min, required this.max, this.isSeconds = false, required this.onChanged});
+  const _SliderRow(
+      {required this.label,
+      required this.value,
+      required this.min,
+      required this.max,
+      this.isSeconds = false,
+      required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -1132,9 +1344,22 @@ class _SliderRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 0.0),
       child: Row(
         children: [
-          SizedBox(width: 40, child: Text(label, style: const TextStyle(fontSize: 11))),
-          Expanded(child: SizedBox(height: 32, child: Slider(value: value, min: min, max: max, onChanged: onChanged))),
-          SizedBox(width: 45, child: Text(isSeconds ? '${value.toStringAsFixed(2)}s' : value.toStringAsFixed(2), style: const TextStyle(fontSize: 11), textAlign: TextAlign.end)),
+          SizedBox(
+              width: 40,
+              child: Text(label, style: const TextStyle(fontSize: 11))),
+          Expanded(
+              child: SizedBox(
+                  height: 32,
+                  child: Slider(
+                      value: value, min: min, max: max, onChanged: onChanged))),
+          SizedBox(
+              width: 45,
+              child: Text(
+                  isSeconds
+                      ? '${value.toStringAsFixed(2)}s'
+                      : value.toStringAsFixed(2),
+                  style: const TextStyle(fontSize: 11),
+                  textAlign: TextAlign.end)),
         ],
       ),
     );
@@ -1156,14 +1381,14 @@ class _RecorderScreenState extends State<RecorderScreen> {
   WAMediaStreamSourceNode? _micSource;
   WAAnalyserNode? _analyser;
   WAGainNode? _monitorGain;
-  
+
   WABufferSourceNode? _fileSource;
   WABuffer? _decodedBuffer;
 
   bool _isMicActive = false;
   bool _isMonitoring = false;
   bool _isLoadingFile = false;
-  
+
   final Uint8List _fftData = Uint8List(256);
   Timer? _visualizerTimer;
 
@@ -1182,7 +1407,7 @@ class _RecorderScreenState extends State<RecorderScreen> {
   void _initNodes() {
     _analyser = widget.ctx.createAnalyser();
     _analyser!.fftSize = 512;
-    
+
     _monitorGain = widget.ctx.createGain();
     _monitorGain!.gain.value = 0; // Default monitor off
 
@@ -1220,7 +1445,8 @@ class _RecorderScreenState extends State<RecorderScreen> {
   void _toggleMonitor() {
     setState(() {
       _isMonitoring = !_isMonitoring;
-      _monitorGain?.gain.setTargetAtTime(_isMonitoring ? 0.8 : 0, widget.ctx.currentTime, 0.05);
+      _monitorGain?.gain.setTargetAtTime(
+          _isMonitoring ? 0.8 : 0, widget.ctx.currentTime, 0.05);
     });
   }
 
@@ -1230,16 +1456,17 @@ class _RecorderScreenState extends State<RecorderScreen> {
 
     try {
       final data = await rootBundle.load('lib/cr01.wav');
-      final buffer = await widget.ctx.decodeAudioData(data.buffer.asUint8List());
-      
+      final buffer =
+          await widget.ctx.decodeAudioData(data.buffer.asUint8List());
+
       _fileSource?.stop();
       _fileSource?.dispose();
-      
+
       _fileSource = widget.ctx.createBufferSource();
       _fileSource!.buffer = buffer;
       _fileSource!.connect(_analyser!);
       _fileSource!.start();
-      
+
       _decodedBuffer = buffer;
     } catch (e) {
       debugPrint('Error testing decode: $e');
@@ -1254,10 +1481,10 @@ class _RecorderScreenState extends State<RecorderScreen> {
       padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
-          const Text("Phase 4 Verification: I/O & Buffers", 
+          const Text("Phase 4 Verification: I/O & Buffers",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          
+
           // Oscilloscope Visualizer
           Container(
             height: 150,
@@ -1271,9 +1498,9 @@ class _RecorderScreenState extends State<RecorderScreen> {
               painter: OscilloscopePainter(_fftData),
             ),
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Mic Controls
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -1281,7 +1508,8 @@ class _RecorderScreenState extends State<RecorderScreen> {
               ElevatedButton.icon(
                 onPressed: _toggleMic,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _isMicActive ? Colors.red.withValues(alpha: 0.8) : null,
+                  backgroundColor:
+                      _isMicActive ? Colors.red.withValues(alpha: 0.8) : null,
                 ),
                 icon: Icon(_isMicActive ? Icons.mic_off : Icons.mic),
                 label: Text(_isMicActive ? "STOP MIC" : "START MIC"),
@@ -1293,31 +1521,40 @@ class _RecorderScreenState extends State<RecorderScreen> {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 16),
-          
+
           // Decode Test
           const Text("decodeAudioData & BufferSource Test"),
           const SizedBox(height: 8),
           ElevatedButton.icon(
             onPressed: _testDecodeAndPlay,
-            icon: _isLoadingFile ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh),
+            icon: _isLoadingFile
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.refresh),
             label: const Text("DECODE & PLAY CR01.WAV"),
           ),
           if (_decodedBuffer != null)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
-              child: Text("Decoded: ${_decodedBuffer!.numberOfChannels}ch, "
+              child: Text(
+                  "Decoded: ${_decodedBuffer!.numberOfChannels}ch, "
                   "${_decodedBuffer!.length} samples @ ${_decodedBuffer!.sampleRate.toInt()}Hz",
                   style: const TextStyle(fontSize: 12, color: Colors.grey)),
             ),
-          
+
           const Spacer(),
-          const Text("Verification Status:", style: TextStyle(fontWeight: FontWeight.bold)),
-          const Text("✅ MediaStreamSource -> Analyser -> Monitor", style: TextStyle(fontSize: 12)),
-          const Text("✅ decodeAudioData -> BufferSource -> Analyser", style: TextStyle(fontSize: 12)),
+          const Text("Verification Status:",
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text("✅ MediaStreamSource -> Analyser -> Monitor",
+              style: TextStyle(fontSize: 12)),
+          const Text("✅ decodeAudioData -> BufferSource -> Analyser",
+              style: TextStyle(fontSize: 12)),
         ],
       ),
     );

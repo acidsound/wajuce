@@ -7,6 +7,7 @@ library;
 
 import 'dart:ffi' as ffi;
 import 'dart:io' show Platform;
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -390,6 +391,12 @@ void _freeCString(ffi.Pointer<ffi.Char> ptr) {
   calloc.free(ptr);
 }
 
+final Set<int> _emulatedPannerNodes = <int>{};
+final Set<int> _emulatedConstantSourceNodes = <int>{};
+final Set<int> _emulatedConvolverNodes = <int>{};
+final Map<int, Float64List> _iirFeedforward = <int, Float64List>{};
+final Map<int, Float64List> _iirFeedback = <int, Float64List>{};
+
 // ---------------------------------------------------------------------------
 // Backend API — Context
 // ---------------------------------------------------------------------------
@@ -411,6 +418,15 @@ void contextResume(int ctxId) => _contextResume(ctxId);
 void contextSuspend(int ctxId) => _contextSuspend(ctxId);
 void contextClose(int ctxId) => _contextClose(ctxId);
 int contextGetDestinationId(int ctxId) => _contextGetDestinationId(ctxId);
+int contextGetListenerId(int ctxId) => -1;
+double contextGetBaseLatency(int ctxId) => 0.0;
+double contextGetOutputLatency(int ctxId) => 0.0;
+Object contextGetSinkId(int ctxId) => 'default';
+Map<String, double> contextGetOutputTimestamp(int ctxId) => {
+      'contextTime': contextGetTime(ctxId),
+      'performanceTime': 0.0,
+    };
+int destinationGetMaxChannelCount(int ctxId) => 2;
 
 int createChannelSplitter(int id, int outputs) =>
     _createChannelSplitter(id, outputs);
@@ -429,10 +445,49 @@ int createBufferSource(int ctxId) => _createBufferSource(ctxId);
 int createAnalyser(int ctxId) => _createAnalyser(ctxId);
 int createStereoPanner(int ctxId) => _createStereoPanner(ctxId);
 int createWaveShaper(int ctxId) => _createWaveShaper(ctxId);
+int createPanner(int ctxId) {
+  final id = _createStereoPanner(ctxId);
+  _emulatedPannerNodes.add(id);
+  return id;
+}
+
+int createConstantSource(int ctxId) {
+  final id = _createOscillator(ctxId);
+  _emulatedConstantSourceNodes.add(id);
+  _oscSetType(id, 1); // square
+  final freq = _toCString('frequency');
+  _paramSet(id, freq, 0.0);
+  _freeCString(freq);
+  return id;
+}
+
+int createConvolver(int ctxId) {
+  final id = _createGain(ctxId); // pass-through fallback
+  _emulatedConvolverNodes.add(id);
+  return id;
+}
+
+int createIIRFilter(int ctxId, Float64List feedforward, Float64List feedback) {
+  final id = _createBiquadFilter(ctxId);
+  _iirFeedforward[id] = Float64List.fromList(feedforward);
+  _iirFeedback[id] = Float64List.fromList(feedback);
+  return id;
+}
+
 int createMediaStreamSource(int ctxId, [dynamic stream]) =>
     _createMediaStreamSource(ctxId);
 int createMediaStreamDestination(int ctxId) =>
     _createMediaStreamDestination(ctxId);
+int createMediaElementSource(int ctxId, [dynamic mediaElement]) =>
+    _createMediaStreamSource(ctxId);
+int createMediaStreamTrackSource(int ctxId, [dynamic mediaStreamTrack]) =>
+    _createMediaStreamSource(ctxId);
+int createScriptProcessor(
+    int ctxId, int bufferSize, int inChannels, int outChannels) {
+  final inputs = inChannels > 0 ? inChannels : 2;
+  final outputs = outChannels > 0 ? outChannels : 2;
+  return _createWorkletBridge(ctxId, inputs, outputs);
+}
 
 List<int> createMachineVoice(int ctxId) {
   final ptr = calloc<ffi.Int32>(7);
@@ -459,6 +514,11 @@ void disconnectAll(int ctxId, int srcId) {
 }
 
 void removeNode(int ctxId, int nodeId) {
+  _emulatedPannerNodes.remove(nodeId);
+  _emulatedConstantSourceNodes.remove(nodeId);
+  _emulatedConvolverNodes.remove(nodeId);
+  _iirFeedforward.remove(nodeId);
+  _iirFeedback.remove(nodeId);
   _removeNode(ctxId, nodeId);
 }
 
@@ -467,12 +527,32 @@ void removeNode(int ctxId, int nodeId) {
 // ---------------------------------------------------------------------------
 
 void paramSet(int nodeId, String paramName, double value) {
+  if (nodeId < 0) {
+    return;
+  }
+  if (_emulatedPannerNodes.contains(nodeId)) {
+    if (paramName == 'positionX') {
+      final pan = value.clamp(-1.0, 1.0);
+      final p = _toCString('pan');
+      _paramSet(nodeId, p, pan);
+      _freeCString(p);
+      return;
+    }
+  }
+  if (_emulatedConstantSourceNodes.contains(nodeId) && paramName == 'offset') {
+    // ConstantSource fallback maps offset to oscillator detune-free frequency
+    // path is unavailable in native fallback, so this remains a no-op.
+    return;
+  }
   final p = _toCString(paramName);
   _paramSet(nodeId, p, value);
   _freeCString(p);
 }
 
 void paramSetAtTime(int nodeId, String paramName, double value, double time) {
+  if (nodeId < 0) {
+    return;
+  }
   final p = _toCString(paramName);
   _paramSetAtTime(nodeId, p, value, time);
   _freeCString(p);
@@ -480,12 +560,18 @@ void paramSetAtTime(int nodeId, String paramName, double value, double time) {
 
 void paramLinearRamp(
     int nodeId, String paramName, double value, double endTime) {
+  if (nodeId < 0) {
+    return;
+  }
   final p = _toCString(paramName);
   _paramLinearRamp(nodeId, p, value, endTime);
   _freeCString(p);
 }
 
 void paramExpRamp(int nodeId, String paramName, double value, double endTime) {
+  if (nodeId < 0) {
+    return;
+  }
   final p = _toCString(paramName);
   _paramExpRamp(nodeId, p, value, endTime);
   _freeCString(p);
@@ -493,21 +579,44 @@ void paramExpRamp(int nodeId, String paramName, double value, double endTime) {
 
 void paramSetTarget(
     int nodeId, String paramName, double target, double startTime, double tc) {
+  if (nodeId < 0) {
+    return;
+  }
   final p = _toCString(paramName);
   _paramSetTarget(nodeId, p, target, startTime, tc);
   _freeCString(p);
 }
 
 void paramCancel(int nodeId, String paramName, double cancelTime) {
+  if (nodeId < 0) {
+    return;
+  }
   final p = _toCString(paramName);
   _paramCancel(nodeId, p, cancelTime);
   _freeCString(p);
 }
 
 void paramCancelAndHold(int nodeId, String paramName, double time) {
+  if (nodeId < 0) {
+    return;
+  }
   final p = _toCString(paramName);
   _paramCancelAndHold(nodeId, p, time);
   _freeCString(p);
+}
+
+void paramSetValueCurve(int nodeId, String paramName, Float32List values,
+    double startTime, double duration) {
+  if (nodeId < 0) {
+    return;
+  }
+  if (values.isEmpty || duration <= 0) {
+    return;
+  }
+  final step = duration / values.length;
+  for (int i = 0; i < values.length; i++) {
+    paramSetAtTime(nodeId, paramName, values[i], startTime + (step * i));
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -563,6 +672,12 @@ void bufferSourceStart(int nodeId, [double when = 0]) {
   _bufSrcStart(nodeId, when);
 }
 
+void bufferSourceStartAdvanced(int nodeId, double when,
+    [double offset = 0, double? duration]) {
+  // Native backend currently supports "when" scheduling only.
+  _bufSrcStart(nodeId, when);
+}
+
 void bufferSourceStop(int nodeId, [double when = 0]) {
   _bufSrcStop(nodeId, when);
 }
@@ -571,12 +686,32 @@ void bufferSourceSetLoop(int nodeId, bool loop) {
   _bufSrcSetLoop(nodeId, loop ? 1 : 0);
 }
 
+void bufferSourceSetLoopStart(int nodeId, double loopStart) {
+  // Native backend loop start is currently fixed at 0 in processor.
+}
+
+void bufferSourceSetLoopEnd(int nodeId, double loopEnd) {
+  // Native backend loop end currently uses full buffer length.
+}
+
 // ---------------------------------------------------------------------------
 // Backend API — Analyser
 // ---------------------------------------------------------------------------
 
 void analyserSetFftSize(int nodeId, int size) {
   _analyserSetFft(nodeId, size);
+}
+
+void analyserSetMinDecibels(int nodeId, double value) {
+  // Native analyser backend keeps internal scaling.
+}
+
+void analyserSetMaxDecibels(int nodeId, double value) {
+  // Native analyser backend keeps internal scaling.
+}
+
+void analyserSetSmoothingTimeConstant(int nodeId, double value) {
+  // Native analyser backend keeps internal smoothing.
 }
 
 Uint8List analyserGetByteFrequencyData(int nodeId, int len) {
@@ -610,6 +745,113 @@ Float32List analyserGetFloatTimeDomainData(int nodeId, int len) {
   calloc.free(ptr);
   return result;
 }
+
+void biquadGetFrequencyResponse(int nodeId, Float32List frequencyHz,
+    Float32List magResponse, Float32List phaseResponse) {
+  // Native JUCE backend does not currently expose direct biquad response query.
+  final count = frequencyHz.length;
+  for (int i = 0; i < count; i++) {
+    magResponse[i] = 0.0;
+    phaseResponse[i] = 0.0;
+  }
+}
+
+double compressorGetReduction(int nodeId) {
+  // Native compressor reduction readback is not exposed in current C-API.
+  return 0.0;
+}
+
+void constantSourceStart(int nodeId, double when) {
+  _oscStart(nodeId, when);
+}
+
+void constantSourceStop(int nodeId, double when) {
+  _oscStop(nodeId, when);
+}
+
+void convolverSetBuffer(int nodeId, WABuffer? buffer) {
+  // Convolver fallback currently behaves as pass-through.
+}
+
+void convolverSetNormalize(int nodeId, bool normalize) {
+  // Convolver fallback currently behaves as pass-through.
+}
+
+void iirGetFrequencyResponse(int nodeId, Float32List frequencyHz,
+    Float32List magResponse, Float32List phaseResponse) {
+  final ff = _iirFeedforward[nodeId];
+  final fb = _iirFeedback[nodeId];
+  if (ff == null || fb == null) {
+    for (int i = 0; i < frequencyHz.length; i++) {
+      magResponse[i] = 0;
+      phaseResponse[i] = 0;
+    }
+    return;
+  }
+  const sampleRate = 44100.0;
+  for (int i = 0; i < frequencyHz.length; i++) {
+    final omega = 2.0 * 3.141592653589793 * (frequencyHz[i] / sampleRate);
+    double numRe = 0.0;
+    double numIm = 0.0;
+    for (int k = 0; k < ff.length; k++) {
+      final phase = -omega * k;
+      numRe += ff[k] * math.cos(phase);
+      numIm += ff[k] * math.sin(phase);
+    }
+    double denRe = 1.0;
+    double denIm = 0.0;
+    for (int k = 1; k < fb.length; k++) {
+      final phase = -omega * k;
+      denRe += fb[k] * math.cos(phase);
+      denIm += fb[k] * math.sin(phase);
+    }
+    final denMagSq = (denRe * denRe) + (denIm * denIm);
+    if (denMagSq <= 1e-12) {
+      magResponse[i] = 0.0;
+      phaseResponse[i] = 0.0;
+      continue;
+    }
+    final hRe = (numRe * denRe + numIm * denIm) / denMagSq;
+    final hIm = (numIm * denRe - numRe * denIm) / denMagSq;
+    magResponse[i] = math.sqrt((hRe * hRe) + (hIm * hIm)).toDouble();
+    phaseResponse[i] = math.atan2(hIm, hRe).toDouble();
+  }
+}
+
+void pannerSetPanningModel(int nodeId, int model) {
+  // Fallback uses StereoPanner behavior.
+}
+
+void pannerSetDistanceModel(int nodeId, int model) {
+  // Fallback uses StereoPanner behavior.
+}
+
+void pannerSetRefDistance(int nodeId, double value) {
+  // Fallback uses StereoPanner behavior.
+}
+
+void pannerSetMaxDistance(int nodeId, double value) {
+  // Fallback uses StereoPanner behavior.
+}
+
+void pannerSetRolloffFactor(int nodeId, double value) {
+  // Fallback uses StereoPanner behavior.
+}
+
+void pannerSetConeInnerAngle(int nodeId, double value) {
+  // Fallback uses StereoPanner behavior.
+}
+
+void pannerSetConeOuterAngle(int nodeId, double value) {
+  // Fallback uses StereoPanner behavior.
+}
+
+void pannerSetConeOuterGain(int nodeId, double value) {
+  // Fallback uses StereoPanner behavior.
+}
+
+dynamic mediaStreamSourceGetStream(int nodeId) => null;
+dynamic mediaStreamDestinationGetStream(int nodeId) => null;
 
 // ---------------------------------------------------------------------------
 // Backend API — WaveShaper

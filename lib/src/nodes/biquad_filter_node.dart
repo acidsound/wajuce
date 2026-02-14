@@ -10,10 +10,13 @@ import '../backend/backend.dart' as backend;
 class WABiquadFilterNode extends WANode {
   /// The frequency of the filter in Hertz.
   late final WAParam frequency;
+
   /// The detuning value in cents.
   late final WAParam detune;
+
   /// The quality factor (resonance) of the filter.
   late final WAParam Q;
+
   /// The gain (boost/cut) in decibels, used for shelf/peaking filters.
   late final WAParam gain;
   WABiquadFilterType _type = WABiquadFilterType.lowpass;
@@ -72,6 +75,7 @@ class WABiquadFilterNode extends WANode {
     Float32List magResponse,
     Float32List phaseResponse,
   ) {
-    // TODO: Implement native getFrequencyResponse when available
+    backend.biquadGetFrequencyResponse(
+        nodeId, frequencyHz, magResponse, phaseResponse);
   }
 }

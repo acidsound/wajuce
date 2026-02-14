@@ -1,15 +1,15 @@
-import 'audio_node.dart';
+import 'audio_scheduled_source_node.dart';
 import '../audio_param.dart';
 import '../enums.dart';
 import 'periodic_wave.dart';
 import '../backend/backend.dart' as backend;
 
-
 /// An oscillator that generates a periodic waveform.
 /// Mirrors Web Audio API OscillatorNode.
-class WAOscillatorNode extends WANode {
+class WAOscillatorNode extends WAScheduledSourceNode {
   /// The frequency of the oscillator in Hertz.
   late final WAParam frequency;
+
   /// The detuning value in cents.
   late final WAParam detune;
   WAOscillatorType _type = WAOscillatorType.sine;
@@ -49,11 +49,13 @@ class WAOscillatorNode extends WANode {
   }
 
   /// Start the oscillator at the given time (in seconds).
+  @override
   void start([double when = 0]) {
     backend.oscStart(nodeId, when);
   }
 
   /// Stop the oscillator at the given time.
+  @override
   void stop([double when = 0]) {
     backend.oscStop(nodeId, when);
   }
@@ -61,7 +63,7 @@ class WAOscillatorNode extends WANode {
   /// Set a custom PeriodicWave waveform.
   void setPeriodicWave(WAPeriodicWave periodicWave) {
     _type = WAOscillatorType.custom;
-    
+
     // We need to pass the arrays to C++
     // Allocate temporary memory for the call
     final len = periodicWave.real.length;
@@ -69,6 +71,7 @@ class WAOscillatorNode extends WANode {
       throw ArgumentError('Real and Imag arrays must have same length');
     }
 
-    backend.oscSetPeriodicWave(nodeId, periodicWave.real, periodicWave.imag, len);
+    backend.oscSetPeriodicWave(
+        nodeId, periodicWave.real, periodicWave.imag, len);
   }
 }

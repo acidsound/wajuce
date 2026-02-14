@@ -9,9 +9,10 @@ class WAAnalyserNode extends WANode {
   int _fftSize = 2048;
 
   /// Maximum decibels for FFT analysis.
-  double maxDecibels = -30.0;
+  double _maxDecibels = -30.0;
+
   /// Minimum decibels for FFT analysis.
-  double minDecibels = -100.0;
+  double _minDecibels = -100.0;
   double _smoothingTimeConstant = 0.8;
 
   /// Creates a new AnalyserNode.
@@ -39,10 +40,26 @@ class WAAnalyserNode extends WANode {
   /// The number of frequency bins (half of [fftSize]).
   int get frequencyBinCount => _fftSize ~/ 2;
 
+  /// Minimum decibel value for FFT scaling.
+  double get minDecibels => _minDecibels;
+  set minDecibels(double value) {
+    _minDecibels = value;
+    backend.analyserSetMinDecibels(nodeId, value);
+  }
+
+  /// Maximum decibel value for FFT scaling.
+  double get maxDecibels => _maxDecibels;
+  set maxDecibels(double value) {
+    _maxDecibels = value;
+    backend.analyserSetMaxDecibels(nodeId, value);
+  }
+
   /// Smoothing constant for frequency data (0.0 to 1.0).
   double get smoothingTimeConstant => _smoothingTimeConstant;
-  set smoothingTimeConstant(double v) =>
-      _smoothingTimeConstant = v.clamp(0.0, 1.0);
+  set smoothingTimeConstant(double v) {
+    _smoothingTimeConstant = v.clamp(0.0, 1.0);
+    backend.analyserSetSmoothingTimeConstant(nodeId, _smoothingTimeConstant);
+  }
 
   /// Copies current frequency-domain data into [array].
   void getByteFrequencyData(Uint8List array) {
@@ -58,15 +75,13 @@ class WAAnalyserNode extends WANode {
 
   /// Copies current frequency-domain data (Float32) into [array].
   void getFloatFrequencyData(Float32List array) {
-    final result =
-        backend.analyserGetFloatFrequencyData(nodeId, array.length);
+    final result = backend.analyserGetFloatFrequencyData(nodeId, array.length);
     array.setAll(0, result);
   }
 
   /// Copies current time-domain data (Float32) into [array].
   void getFloatTimeDomainData(Float32List array) {
-    final result =
-        backend.analyserGetFloatTimeDomainData(nodeId, array.length);
+    final result = backend.analyserGetFloatTimeDomainData(nodeId, array.length);
     array.setAll(0, result);
   }
 }

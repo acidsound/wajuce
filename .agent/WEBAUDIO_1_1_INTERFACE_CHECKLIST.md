@@ -9,6 +9,7 @@
 - `IMPLEMENTED`: Interface exists and core API surface is present.
 - `PARTIAL`: Interface exists but important members/behavior are missing.
 - `MISSING`: No corresponding public API in `wajuce`.
+- `SHIM`: Deprecated interface exposed only as minimal compatibility wrapper.
 
 ## How This Was Built
 
@@ -69,57 +70,64 @@
 
 | Spec | Interface | wajuce mapping | Status | Notes |
 | --- | --- | --- | --- | --- |
-| 1.1 | BaseAudioContext | `WAContext` | PARTIAL | Missing several factory methods and attributes (`listener`, etc). |
-| 1.2 | AudioContext | `WAContext` | PARTIAL | `resume/suspend/close/state/currentTime` present; `baseLatency/outputLatency/sinkId/getOutputTimestamp/renderCapacity` missing. |
-| 1.2.7 | AudioSinkInfo | - | MISSING | No equivalent interface. |
-| 1.2.9 | AudioRenderCapacity | - | MISSING | No equivalent interface. |
-| 1.2.11 | AudioRenderCapacityEvent | - | MISSING | No equivalent interface. |
-| 1.3 | OfflineAudioContext | `WAOfflineContext` | PARTIAL | `startRendering()` is not implemented (`UnimplementedError`). |
+| 1.1 | BaseAudioContext | `WAContext` | PARTIAL | Core attrs/factories expanded (`listener`, panner/convolver/iir/constant/media sources), but full overload parity is still incomplete. |
+| 1.2 | AudioContext | `WAContext` | PARTIAL | `baseLatency/outputLatency/sinkId/getOutputTimestamp/renderCapacity` added; full sink management/event parity remains incomplete. |
+| 1.2.7 | AudioSinkInfo | `WAAudioSinkInfo` | PARTIAL | Minimal wrapper exposed; full spec shape is not complete. |
+| 1.2.9 | AudioRenderCapacity | `WAAudioRenderCapacity` | PARTIAL | Minimal polling/onUpdate wrapper; not full browser API parity. |
+| 1.2.11 | AudioRenderCapacityEvent | `WAAudioRenderCapacityEvent` | PARTIAL | Minimal event payload shape exposed. |
+| 1.3 | OfflineAudioContext | `WAOfflineContext` | PARTIAL | `startRendering()` now returns an allocated output buffer; full graph render path is pending. |
 | 1.3.5 | OfflineAudioCompletionEvent | - | MISSING | No equivalent interface/event. |
 | 1.4 | AudioBuffer | `WABuffer` | IMPLEMENTED | Core attributes and `copyToChannel/copyFromChannel` exist. |
 | 1.5 | AudioNode | `WANode` | PARTIAL | Basic connect/disconnect exists, but full overload set and AudioParam destination connect are missing. |
-| 1.6 | AudioParam | `WAParam` | PARTIAL | Most automation methods exist; `setValueCurveAtTime()` TODO in backend path. |
-| 1.7 | AudioScheduledSourceNode | (implicit in source nodes) | PARTIAL | No shared base type; `start/stop` behavior exists on concrete nodes. |
-| 1.8 | AnalyserNode | `WAAnalyserNode` | PARTIAL | FFT/data methods exist; `minDecibels/maxDecibels/smoothingTimeConstant` are not fully backend-wired. |
-| 1.9 | AudioBufferSourceNode | `WABufferSourceNode` | PARTIAL | Core playback exists; full `start(when, offset, duration)` semantics and loop fields parity are incomplete. |
-| 1.10 | AudioDestinationNode | `WADestinationNode` | PARTIAL | Basic destination exists; `maxChannelCount` is static in current API. |
-| 1.11 | AudioListener | - | MISSING | No listener interface or 3D listener params. |
-| 1.12 | AudioProcessingEvent (deprecated) | - | MISSING | Deprecated in spec; not exposed. |
-| 1.13 | BiquadFilterNode | `WABiquadFilterNode` | PARTIAL | Main params/type exist; `getFrequencyResponse()` is TODO. |
+| 1.6 | AudioParam | `WAParam` | IMPLEMENTED | `setValueCurveAtTime()` backend path added (web native API, JUCE fallback via scheduled points). |
+| 1.7 | AudioScheduledSourceNode | `WAScheduledSourceNode` | PARTIAL | Shared base type added; `onEnded` event dispatch is not yet backend-driven. |
+| 1.8 | AnalyserNode | `WAAnalyserNode` | PARTIAL | `minDecibels/maxDecibels/smoothingTimeConstant` setters are wired; native behavior remains backend-dependent. |
+| 1.9 | AudioBufferSourceNode | `WABufferSourceNode` | PARTIAL | Added `start(when, offset, duration)` and `loopStart/loopEnd`; native backend still has partial scheduling support. |
+| 1.10 | AudioDestinationNode | `WADestinationNode` | PARTIAL | Destination exists with backend-provided `maxChannelCount`; full spec parity is still incomplete. |
+| 1.11 | AudioListener | `WAAudioListener` | PARTIAL | Listener params and legacy methods added; native backend currently no-ops listener control. |
+| 1.12 | AudioProcessingEvent (deprecated) | `WAAudioProcessingEvent` | SHIM | Deprecated compatibility payload exposed as minimal shim only. |
+| 1.13 | BiquadFilterNode | `WABiquadFilterNode` | PARTIAL | `getFrequencyResponse()` wired; native backend currently returns fallback response values. |
 | 1.14 | ChannelMergerNode | `WAChannelMergerNode` | IMPLEMENTED | Core constructor behavior present. |
 | 1.15 | ChannelSplitterNode | `WAChannelSplitterNode` | IMPLEMENTED | Core constructor behavior present. |
-| 1.16 | ConstantSourceNode | - | MISSING | No constant source node API. |
-| 1.17 | ConvolverNode | - | MISSING | No convolver node API. |
+| 1.16 | ConstantSourceNode | `WAConstantSourceNode` | PARTIAL | API and factory added; JUCE currently uses an emulated fallback node. |
+| 1.17 | ConvolverNode | `WAConvolverNode` | PARTIAL | API and web backend wiring added; JUCE currently fallback/pass-through. |
 | 1.18 | DelayNode | `WADelayNode` | IMPLEMENTED | `delayTime` exists; note extra non-spec `feedback` param is added. |
-| 1.19 | DynamicsCompressorNode | `WADynamicsCompressorNode` | PARTIAL | Params exist, but `reduction` is currently fixed value in Dart layer. |
+| 1.19 | DynamicsCompressorNode | `WADynamicsCompressorNode` | PARTIAL | `reduction` getter is backend-wired (web); JUCE currently returns fallback `0.0`. |
 | 1.20 | GainNode | `WAGainNode` | IMPLEMENTED | Core interface is present. |
-| 1.21 | IIRFilterNode | - | MISSING | No IIR filter node API. |
-| 1.22 | MediaElementAudioSourceNode | - | MISSING | No media element source API. |
-| 1.23 | MediaStreamAudioDestinationNode | `WAMediaStreamDestNode` | PARTIAL | Node exists, but spec `stream` property is not exposed on Dart class. |
-| 1.24 | MediaStreamAudioSourceNode | `WAMediaStreamSourceNode` | PARTIAL | Node exists, but spec `mediaStream` property is not exposed on Dart class. |
-| 1.25 | MediaStreamTrackAudioSourceNode | - | MISSING | No track-source node API. |
-| 1.26 | OscillatorNode | `WAOscillatorNode` | PARTIAL | Main params/type/start/stop exist; full scheduled-source event parity is incomplete. |
-| 1.27 | PannerNode | - | MISSING | No 3D panner node API. |
+| 1.21 | IIRFilterNode | `WAIIRFilterNode` | PARTIAL | API/factory added with response query; JUCE processing path is currently emulated via biquad fallback. |
+| 1.22 | MediaElementAudioSourceNode | `WAMediaElementSourceNode` | PARTIAL | API/factory added; web wired, JUCE falls back to stream source behavior. |
+| 1.23 | MediaStreamAudioDestinationNode | `WAMediaStreamDestNode` | PARTIAL | `stream` property now exposed; available on web backend. |
+| 1.24 | MediaStreamAudioSourceNode | `WAMediaStreamSourceNode` | PARTIAL | `mediaStream` property now exposed; available on web backend. |
+| 1.25 | MediaStreamTrackAudioSourceNode | `WAMediaStreamTrackSourceNode` | PARTIAL | API/factory added; web wired, JUCE uses fallback source behavior. |
+| 1.26 | OscillatorNode | `WAOscillatorNode` | PARTIAL | Now aligned with `WAScheduledSourceNode`; full `onended` event parity is still incomplete. |
+| 1.27 | PannerNode | `WAPannerNode` | PARTIAL | 3D panner API/factory added; JUCE currently maps to stereo/fallback behavior. |
 | 1.28 | PeriodicWave | `WAPeriodicWave` | PARTIAL | Type exists and is usable via oscillator; full option/constraint parity is incomplete. |
-| 1.29 | ScriptProcessorNode (deprecated) | - | MISSING | Not exposed in public API (web backend has internal interop only). |
+| 1.29 | ScriptProcessorNode (deprecated) | `WAScriptProcessorNode` | SHIM | Deprecated compatibility node exposed as minimal shim only. |
 | 1.30 | StereoPannerNode | `WAStereoPannerNode` | IMPLEMENTED | Core `pan` param and node behavior present. |
 | 1.31 | WaveShaperNode | `WAWaveShaperNode` | IMPLEMENTED | `curve` and `oversample` are exposed. |
 | 1.32 | AudioWorklet | `WAWorklet` | PARTIAL | `addModule` + processor registration are present; full browser parity is not complete. |
 | 1.32.3 | AudioWorkletGlobalScope | (emulated) | PARTIAL | Worklet execution environment exists via isolate/proxy model, not a spec-equivalent global scope object. |
-| 1.32.4 | AudioWorkletNode | `WAWorkletNode` | PARTIAL | `port` exists; full `options`/`parameters` parity is incomplete. |
-| 1.32.4.x | AudioParamMap | - | MISSING | No `AudioWorkletNode.parameters` map interface exposed. |
+| 1.32.4 | AudioWorkletNode | `WAWorkletNode` | PARTIAL | `port` plus minimal `parameters` map exposed; full options/descriptor parity remains incomplete. |
+| 1.32.4.x | AudioParamMap | `WAAudioParamMap` | PARTIAL | Minimal map wrapper added from parameter defaults; not yet backed by full runtime param introspection. |
 | 1.32.5 | AudioWorkletProcessor | `WAWorkletProcessor` | PARTIAL | `process()` and `port` exist; full constructor/descriptor parity differs from spec. |
 
-## 3) Immediate Gaps To Track First
+## 3) Immediate Gap Batch (1~6) Status
 
-- [ ] Implement `WAOfflineContext.startRendering()` backend path.
-- [ ] Implement `WAParam.setValueCurveAtTime()` in JUCE + Web backends.
-- [ ] Add missing node factories on `WAContext` for `ConstantSource`, `Convolver`, `IIRFilter`, `Panner`, media element/track sources.
-- [ ] Add `AudioWorkletNode.parameters` parity (`AudioParamMap` equivalent).
-- [ ] Add `AudioListener` and `PannerNode` 3D audio interfaces.
-- [ ] Decide policy for deprecated interfaces (`ScriptProcessorNode`, `AudioProcessingEvent`): explicit non-goal vs compatibility shim.
+- [x] Implement `WAOfflineContext.startRendering()` backend path (minimal allocated output buffer path).
+- [x] Implement `WAParam.setValueCurveAtTime()` in JUCE + Web backends.
+- [x] Add missing node factories on `WAContext` for `ConstantSource`, `Convolver`, `IIRFilter`, `Panner`, media element/track sources.
+- [x] Add `AudioWorkletNode.parameters` parity (`AudioParamMap` equivalent, minimal map).
+- [x] Add `AudioListener` and `PannerNode` 3D audio interfaces.
+- [x] Deprecated policy applied as requested: minimal shim only for `ScriptProcessorNode` and `AudioProcessingEvent`.
 
-## 4) Repro Commands
+## 4) Next Parity Gaps
+
+- [ ] Native JUCE: full `AudioListener` / `PannerNode` 3D spatial model parity.
+- [ ] Native JUCE: full `ConvolverNode` impulse-response processing.
+- [ ] Native JUCE: true `ConstantSourceNode.offset` behavior parity.
+- [ ] `OfflineAudioContext.startRendering()` real graph render path (current path is minimal allocation).
+- [ ] `AudioWorkletNode.parameters` backend-driven introspection beyond defaults.
+## 5) Repro Commands
 
 ```bash
 # Spec interface extraction (IDL index)
@@ -134,4 +142,3 @@ rg -n "^class\\s+WA|^abstract class\\s+WA" lib/src
 rg -n "create[A-Za-z0-9_]+\\(" lib/src/context.dart lib/src/backend
 rg -n "TODO|UnimplementedError" lib/src
 ```
-

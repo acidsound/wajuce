@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
 import 'audio_buffer.dart';
+import 'audio_context_extras.dart';
+import 'audio_listener.dart';
 import 'enums.dart';
 import 'nodes/audio_node.dart';
 import 'nodes/audio_destination_node.dart';
@@ -12,10 +14,17 @@ import 'nodes/delay_node.dart';
 import 'nodes/buffer_source_node.dart';
 import 'nodes/analyser_node.dart';
 import 'nodes/stereo_panner_node.dart';
+import 'nodes/panner_node.dart';
 import 'nodes/wave_shaper_node.dart';
 import 'nodes/media_stream_nodes.dart';
+import 'nodes/media_element_source_node.dart';
+import 'nodes/media_stream_track_source_node.dart';
 import 'nodes/channel_splitter_node.dart';
 import 'nodes/channel_merger_node.dart';
+import 'nodes/constant_source_node.dart';
+import 'nodes/convolver_node.dart';
+import 'nodes/iir_filter_node.dart';
+import 'nodes/script_processor_node.dart';
 import 'nodes/periodic_wave.dart';
 import 'worklet/wa_worklet.dart';
 import 'worklet/wa_worklet_module.dart';
@@ -36,6 +45,8 @@ import 'backend/backend.dart' as backend;
 class WAContext {
   late final int _ctxId;
   late final WADestinationNode _destination;
+  late final WAAudioListener _listener;
+  late final WAAudioRenderCapacity _renderCapacity;
   late final WAWorklet _worklet;
 
   /// Creates a new AudioContext.
@@ -46,7 +57,13 @@ class WAContext {
     _ctxId = backend.contextCreate(sampleRate, bufferSize,
         inputChannels: numberOfChannels, outputChannels: numberOfChannels);
     final destId = backend.contextGetDestinationId(_ctxId);
-    _destination = WADestinationNode(nodeId: destId, contextId: _ctxId);
+    _destination = WADestinationNode(
+      nodeId: destId,
+      contextId: _ctxId,
+      maxChannelCount: backend.destinationGetMaxChannelCount(_ctxId),
+    );
+    _listener = WAAudioListener(nodeId: backend.contextGetListenerId(_ctxId));
+    _renderCapacity = WAAudioRenderCapacity(_ctxId);
     _worklet = WAWorklet(contextId: _ctxId, sampleRate: sampleRate);
 
     // Initialize Web AudioWorklet if on Web
@@ -57,7 +74,13 @@ class WAContext {
   WAContext.fromId(this._ctxId) {
     _worklet = WAWorklet(contextId: _ctxId);
     final destId = backend.contextGetDestinationId(_ctxId);
-    _destination = WADestinationNode(nodeId: destId, contextId: _ctxId);
+    _destination = WADestinationNode(
+      nodeId: destId,
+      contextId: _ctxId,
+      maxChannelCount: backend.destinationGetMaxChannelCount(_ctxId),
+    );
+    _listener = WAAudioListener(nodeId: backend.contextGetListenerId(_ctxId));
+    _renderCapacity = WAAudioRenderCapacity(_ctxId);
 
     // Initialize Web AudioWorklet if on Web
     backend.webInitializeWorklet(_ctxId);
@@ -69,6 +92,9 @@ class WAContext {
   /// The output destination node.
   WADestinationNode get destination => _destination;
 
+  /// The listener used by spatialized nodes.
+  WAAudioListener get listener => _listener;
+
   /// Current audio time in seconds.
   double get currentTime => backend.contextGetTime(_ctxId);
 
@@ -79,6 +105,27 @@ class WAContext {
 
   /// The sample rate of this context.
   double get sampleRate => backend.contextGetSampleRate(_ctxId);
+
+  /// Base processing latency (seconds) when available.
+  double get baseLatency => backend.contextGetBaseLatency(_ctxId);
+
+  /// Output device latency (seconds) when available.
+  double get outputLatency => backend.contextGetOutputLatency(_ctxId);
+
+  /// Sink identifier, when available.
+  Object get sinkId => backend.contextGetSinkId(_ctxId);
+
+  /// Render-capacity API surface.
+  WAAudioRenderCapacity get renderCapacity => _renderCapacity;
+
+  /// Output timestamp pair.
+  WAAudioTimestamp getOutputTimestamp() {
+    final ts = backend.contextGetOutputTimestamp(_ctxId);
+    return WAAudioTimestamp(
+      contextTime: ts['contextTime'] ?? currentTime,
+      performanceTime: ts['performanceTime'] ?? 0.0,
+    );
+  }
 
   /// The current state of the context.
   WAAudioContextState get state {
@@ -108,6 +155,7 @@ class WAContext {
 
   /// Close the context and release resources.
   Future<void> close() async {
+    _renderCapacity.stop();
     backend.contextClose(_ctxId);
     await _worklet.close();
   }
@@ -165,10 +213,40 @@ class WAContext {
     return WAStereoPannerNode(nodeId: id, contextId: _ctxId);
   }
 
+  /// Create a PannerNode (3D spatial panner).
+  WAPannerNode createPanner() {
+    final id = backend.createPanner(_ctxId);
+    return WAPannerNode(nodeId: id, contextId: _ctxId);
+  }
+
   /// Create a WaveShaperNode.
   WAWaveShaperNode createWaveShaper() {
     final id = backend.createWaveShaper(_ctxId);
     return WAWaveShaperNode(nodeId: id, contextId: _ctxId);
+  }
+
+  /// Create a ConstantSourceNode.
+  WAConstantSourceNode createConstantSource() {
+    final id = backend.createConstantSource(_ctxId);
+    return WAConstantSourceNode(nodeId: id, contextId: _ctxId);
+  }
+
+  /// Create a ConvolverNode.
+  WAConvolverNode createConvolver() {
+    final id = backend.createConvolver(_ctxId);
+    return WAConvolverNode(nodeId: id, contextId: _ctxId);
+  }
+
+  /// Create an IIRFilterNode.
+  WAIIRFilterNode createIIRFilter(
+      Float64List feedforward, Float64List feedback) {
+    final id = backend.createIIRFilter(_ctxId, feedforward, feedback);
+    return WAIIRFilterNode(
+      nodeId: id,
+      contextId: _ctxId,
+      feedforward: feedforward,
+      feedback: feedback,
+    );
   }
 
   /// Creates a [WAPeriodicWave] instance.
@@ -196,7 +274,11 @@ class WAContext {
   /// In this implementation, the stream usually represents the default microphone.
   WAMediaStreamSourceNode createMediaStreamSource([dynamic stream]) {
     final nodeId = backend.createMediaStreamSource(_ctxId, stream);
-    return WAMediaStreamSourceNode(nodeId: nodeId, contextId: _ctxId);
+    return WAMediaStreamSourceNode(
+      nodeId: nodeId,
+      contextId: _ctxId,
+      mediaStream: backend.mediaStreamSourceGetStream(nodeId),
+    );
   }
 
   /// Creates a microphone source node.
@@ -210,7 +292,54 @@ class WAContext {
   /// Creates a [WAMediaStreamDestNode].
   WAMediaStreamDestNode createMediaStreamDestination() {
     final nodeId = backend.createMediaStreamDestination(_ctxId);
-    return WAMediaStreamDestNode(nodeId: nodeId, contextId: _ctxId);
+    return WAMediaStreamDestNode(
+      nodeId: nodeId,
+      contextId: _ctxId,
+      stream: backend.mediaStreamDestinationGetStream(nodeId),
+    );
+  }
+
+  /// Creates a MediaElementAudioSourceNode from a media element (web).
+  WAMediaElementSourceNode createMediaElementSource(dynamic mediaElement) {
+    final nodeId = backend.createMediaElementSource(_ctxId, mediaElement);
+    return WAMediaElementSourceNode(
+      nodeId: nodeId,
+      contextId: _ctxId,
+      mediaElement: mediaElement,
+    );
+  }
+
+  /// Creates a MediaStreamTrackAudioSourceNode from a media stream track.
+  WAMediaStreamTrackSourceNode createMediaStreamTrackSource(
+      dynamic mediaStreamTrack) {
+    final nodeId =
+        backend.createMediaStreamTrackSource(_ctxId, mediaStreamTrack);
+    return WAMediaStreamTrackSourceNode(
+      nodeId: nodeId,
+      contextId: _ctxId,
+      mediaStreamTrack: mediaStreamTrack,
+    );
+  }
+
+  /// Creates a deprecated ScriptProcessorNode shim.
+  @Deprecated('ScriptProcessorNode is deprecated. Use createWorkletNode().')
+  WAScriptProcessorNode createScriptProcessor(
+      [int bufferSize = 0,
+      int numberOfInputChannels = 2,
+      int numberOfOutputChannels = 2]) {
+    final nodeId = backend.createScriptProcessor(
+      _ctxId,
+      bufferSize,
+      numberOfInputChannels,
+      numberOfOutputChannels,
+    );
+    return WAScriptProcessorNode(
+      nodeId: nodeId,
+      contextId: _ctxId,
+      bufferSize: bufferSize,
+      numberOfInputChannels: numberOfInputChannels,
+      numberOfOutputChannels: numberOfOutputChannels,
+    );
   }
 
   /// Create an AudioWorkletNode.

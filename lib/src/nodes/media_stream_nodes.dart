@@ -3,10 +3,14 @@ import 'audio_node.dart';
 /// Represents an audio source from a media stream (e.g., microphone).
 /// Mirrors Web Audio API MediaStreamAudioSourceNode.
 class WAMediaStreamSourceNode extends WANode {
+  /// Source MediaStream (web) when available.
+  final dynamic mediaStream;
+
   /// Creates a new MediaStreamSourceNode.
   WAMediaStreamSourceNode({
     required super.nodeId,
     required super.contextId,
+    this.mediaStream,
   });
 
   @override
@@ -19,13 +23,15 @@ class WAMediaStreamSourceNode extends WANode {
 /// Represents an audio destination that records to a media stream.
 /// Mirrors Web Audio API MediaStreamAudioDestinationNode.
 class WAMediaStreamDestNode extends WANode {
+  /// Destination MediaStream (web) when available.
+  final dynamic stream;
+
   /// Creates a new MediaStreamAudioDestinationNode.
   WAMediaStreamDestNode({
     required super.nodeId,
     required super.contextId,
-  }) {
-    // MediaStreamDestination usually has a 'stream' property
-  }
+    this.stream,
+  });
 
   @override
   int get numberOfInputs => 1;

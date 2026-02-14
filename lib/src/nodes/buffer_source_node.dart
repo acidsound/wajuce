@@ -1,23 +1,23 @@
-import 'audio_node.dart';
+import 'audio_scheduled_source_node.dart';
 import '../audio_param.dart';
 import '../audio_buffer.dart';
 import '../backend/backend.dart' as backend;
 
 /// Plays an AudioBuffer. Mirrors Web Audio API AudioBufferSourceNode.
-class WABufferSourceNode extends WANode {
+class WABufferSourceNode extends WAScheduledSourceNode {
   /// The rate at which the buffer is played back.
   late final WAParam playbackRate;
+
   /// The detuning value in cents.
   late final WAParam detune;
+
   /// Experimental: decay parameter for grain/buffer sources.
   late final WAParam decay;
   WABuffer? _buffer;
   bool _loop = false;
 
-  /// Start time for looping, in seconds.
-  double loopStart = 0;
-  /// End time for looping, in seconds.
-  double loopEnd = 0;
+  double _loopStart = 0;
+  double _loopEnd = 0;
 
   /// Creates a new BufferSourceNode.
   WABufferSourceNode({
@@ -69,12 +69,33 @@ class WABufferSourceNode extends WANode {
     backend.bufferSourceSetLoop(nodeId, v);
   }
 
-  /// Start playback at the given time.
+  /// Start time for looping, in seconds.
+  double get loopStart => _loopStart;
+  set loopStart(double value) {
+    _loopStart = value;
+    backend.bufferSourceSetLoopStart(nodeId, value);
+  }
+
+  /// End time for looping, in seconds.
+  double get loopEnd => _loopEnd;
+  set loopEnd(double value) {
+    _loopEnd = value;
+    backend.bufferSourceSetLoopEnd(nodeId, value);
+  }
+
+  /// Start playback at [when].
+  @override
   void start([double when = 0]) {
     backend.bufferSourceStart(nodeId, when);
   }
 
+  /// Start playback at [when], with optional [offset] and [duration].
+  void startAt(double when, [double offset = 0, double? duration]) {
+    backend.bufferSourceStartAdvanced(nodeId, when, offset, duration);
+  }
+
   /// Stop playback at the given time.
+  @override
   void stop([double when = 0]) {
     backend.bufferSourceStop(nodeId, when);
   }

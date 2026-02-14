@@ -1,5 +1,7 @@
 import '../nodes/audio_node.dart';
+import '../audio_param.dart';
 import 'wa_worklet.dart';
+import 'audio_param_map.dart';
 
 /// An AudioWorkletNode — connects a custom processor to the audio graph.
 /// Mirrors Web Audio API AudioWorkletNode.
@@ -20,6 +22,9 @@ class WAWorkletNode extends WANode {
 
   /// The message port for bidirectional communication with the processor.
   late final WAMessagePort port;
+
+  /// Worklet parameter map (minimal parity for AudioParamMap).
+  late final WAAudioParamMap parameters;
 
   /// Creates a new AudioWorkletNode.
   WAWorkletNode({
@@ -45,6 +50,16 @@ class WAWorkletNode extends WANode {
       nodeId: nodeId,
       worklet: _worklet,
     );
+
+    final params = <String, WAParam>{};
+    for (final entry in parameterDefaults.entries) {
+      params[entry.key] = WAParam(
+        nodeId: nodeId,
+        paramName: entry.key,
+        defaultValue: entry.value,
+      );
+    }
+    parameters = WAAudioParamMap(params);
 
     // Listen for messages from the processor
     _worklet.addMessageListener(nodeId, (data) {

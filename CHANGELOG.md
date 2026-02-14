@@ -1,3 +1,13 @@
+## 0.1.5
+
+* **Interface Coverage Expansion**: Added Web Audio 1.1 surface for `AudioScheduledSourceNode`, `ConstantSourceNode`, `ConvolverNode`, `IIRFilterNode`, `PannerNode`, `MediaElementAudioSourceNode`, and `MediaStreamTrackAudioSourceNode`.
+* **Context Extras**: Added `listener`, `baseLatency`, `outputLatency`, `sinkId`, `getOutputTimestamp()`, and minimal `AudioRenderCapacity` wrappers.
+* **AudioParam/Node Parity**: Wired `setValueCurveAtTime`, buffer-source advanced start/loop window fields, analyser decibel/smoothing setters, biquad frequency response, and compressor reduction getter paths.
+* **Worklet Parity**: Added minimal `AudioParamMap`-style `parameters` exposure on `WAWorkletNode`.
+* **Deprecated Policy**: Added minimal compatibility shims for deprecated `ScriptProcessorNode` and `AudioProcessingEvent` only.
+* **Backend Alignment**: Synchronized `web`, `juce`, and `stub` backend interfaces for the new API surface, including safe JUCE no-op guards for unsupported listener IDs.
+* **Documentation**: Updated Web Audio 1.1 interface checklist with implementation/shim status and next parity gaps.
+
 ## 0.1.4
 
 * **AudioWorklet Ergonomics**: Added `WAWorkletModules`-based module loading flow and improved example usage so processor/module identifiers are encapsulated behind helper APIs.

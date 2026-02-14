@@ -98,7 +98,13 @@ class WAParam {
   /// Schedules a curve of values over a duration.
   WAParam setValueCurveAtTime(
       Float32List values, double startTime, double duration) {
-    // TODO: Implement setValueCurveAtTime in backend
+    backend.paramSetValueCurve(
+      _nodeId,
+      _paramName,
+      values,
+      startTime,
+      duration,
+    );
     return this;
   }
 

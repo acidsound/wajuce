@@ -21,9 +21,12 @@ export 'src/context.dart';
 export 'src/offline_context.dart';
 export 'src/audio_param.dart';
 export 'src/audio_buffer.dart';
+export 'src/audio_listener.dart';
+export 'src/audio_context_extras.dart';
 
 // Nodes — Base
 export 'src/nodes/audio_node.dart';
+export 'src/nodes/audio_scheduled_source_node.dart';
 export 'src/nodes/channel_splitter_node.dart';
 export 'src/nodes/channel_merger_node.dart';
 export 'src/nodes/audio_destination_node.dart';
@@ -39,6 +42,13 @@ export 'src/nodes/buffer_source_node.dart';
 export 'src/nodes/analyser_node.dart';
 export 'src/nodes/wave_shaper_node.dart';
 export 'src/nodes/media_stream_nodes.dart';
+export 'src/nodes/media_element_source_node.dart';
+export 'src/nodes/media_stream_track_source_node.dart';
+export 'src/nodes/panner_node.dart';
+export 'src/nodes/constant_source_node.dart';
+export 'src/nodes/convolver_node.dart';
+export 'src/nodes/iir_filter_node.dart';
+export 'src/nodes/script_processor_node.dart';
 export 'src/nodes/periodic_wave.dart';
 
 // Worklet
@@ -46,6 +56,7 @@ export 'src/worklet/wa_worklet.dart';
 export 'src/worklet/wa_worklet_module.dart';
 export 'src/worklet/wa_worklet_node.dart';
 export 'src/worklet/wa_worklet_processor.dart';
+export 'src/worklet/audio_param_map.dart';
 
 // MIDI
 export 'src/midi.dart';

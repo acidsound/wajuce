@@ -27,6 +27,7 @@ extension type JSAudioContext._(JSObject _) implements JSObject {
   external JSPromise suspend();
   external JSPromise close();
   external JSObject get destination;
+  external JSObject get listener;
   external JSObject createGain();
   external JSObject createOscillator();
   external JSObject createBiquadFilter();
@@ -35,7 +36,11 @@ extension type JSAudioContext._(JSObject _) implements JSObject {
   external JSObject createBufferSource();
   external JSObject createAnalyser();
   external JSObject createStereoPanner();
+  external JSObject createPanner();
   external JSObject createWaveShaper();
+  external JSObject createConvolver();
+  external JSObject createConstantSource();
+  external JSObject createIIRFilter(JSArray feedforward, JSArray feedback);
   external JSObject createChannelSplitter([JSNumber? numberOfOutputs]);
   external JSObject createChannelMerger([JSNumber? numberOfInputs]);
   external JSAudioBuffer createBuffer(
@@ -44,7 +49,11 @@ extension type JSAudioContext._(JSObject _) implements JSObject {
       JSFloat32Array real, JSFloat32Array imag,
       [JSObject? options]);
   external JSPromise decodeAudioData(JSArrayBuffer audioData);
+  external JSNumber get baseLatency;
+  external JSNumber get outputLatency;
   external JSObject createMediaStreamSource(JSObject stream);
+  external JSObject createMediaElementSource(JSObject mediaElement);
+  external JSObject createMediaStreamTrackSource(JSObject mediaStreamTrack);
   external JSObject createScriptProcessor(
       [JSNumber? bufferSize,
       JSNumber? numberOfInputChannels,
@@ -65,6 +74,8 @@ extension type JSAudioParam._(JSObject _) implements JSObject {
       JSNumber value, JSNumber endTime);
   external JSAudioParam setTargetAtTime(
       JSNumber target, JSNumber startTime, JSNumber timeConstant);
+  external JSAudioParam setValueCurveAtTime(
+      JSFloat32Array values, JSNumber startTime, JSNumber duration);
   external JSAudioParam cancelScheduledValues(JSNumber startTime);
   external JSAudioParam cancelAndHoldAtTime(JSNumber cancelTime);
 }
@@ -86,6 +97,10 @@ int _nextId = 1;
 final Map<int, JSObject> _nodes = {};
 final Map<int, JSAudioContext> _contexts = {};
 final Map<int, JSObject> _workletPorts = {};
+final Map<int, int> _contextDestinationIds = {};
+final Map<int, int> _contextListenerIds = {};
+final Map<int, JSObject> _mediaStreamSourceStreams = {};
+final Map<int, JSObject> _mediaStreamDestinationStreams = {};
 
 /// Resolve the AudioParam for a given node by paramName
 JSAudioParam? _getParam(int nodeId, String paramName) {
@@ -94,7 +109,13 @@ JSAudioParam? _getParam(int nodeId, String paramName) {
   try {
     return node.getProperty(paramName.toJS) as JSAudioParam;
   } catch (_) {
-    return null;
+    try {
+      final parameters = node.getProperty('parameters'.toJS) as JSObject;
+      final param = parameters.callMethod('get'.toJS, paramName.toJS);
+      return param as JSAudioParam?;
+    } catch (_) {
+      return null;
+    }
   }
 }
 
@@ -136,6 +157,9 @@ JSAny? _dartMessageToJs(dynamic value) {
   }
 }
 
+JSArray _float64ListToJSArray(Float64List values) =>
+    values.map((v) => v.toJS).toList().toJS;
+
 // ---------------------------------------------------------------------------
 // Backend API — Context
 // ---------------------------------------------------------------------------
@@ -145,11 +169,24 @@ int contextCreate(int sampleRate, int bufferSize,
   final ctx = JSAudioContext();
   final id = _nextId++;
   _contexts[id] = ctx;
-  _nodes[0] = ctx.destination;
+  final destinationId = _nextId++;
+  _nodes[destinationId] = ctx.destination;
+  _contextDestinationIds[id] = destinationId;
+  final listenerId = _nextId++;
+  _nodes[listenerId] = ctx.listener;
+  _contextListenerIds[id] = listenerId;
   return id;
 }
 
 void contextDestroy(int ctxId) {
+  final destinationId = _contextDestinationIds.remove(ctxId);
+  if (destinationId != null) {
+    _nodes.remove(destinationId);
+  }
+  final listenerId = _contextListenerIds.remove(ctxId);
+  if (listenerId != null) {
+    _nodes.remove(listenerId);
+  }
   _contexts.remove(ctxId);
 }
 
@@ -191,7 +228,75 @@ void contextClose(int ctxId) {
   _contexts[ctxId]?.close();
 }
 
-int contextGetDestinationId(int ctxId) => 0;
+int contextGetDestinationId(int ctxId) => _contextDestinationIds[ctxId] ?? 0;
+int contextGetListenerId(int ctxId) => _contextListenerIds[ctxId] ?? -1;
+double contextGetBaseLatency(int ctxId) {
+  final ctx = _contexts[ctxId];
+  if (ctx == null) return 0.0;
+  try {
+    return ctx.baseLatency.toDartDouble;
+  } catch (_) {
+    return 0.0;
+  }
+}
+
+double contextGetOutputLatency(int ctxId) {
+  final ctx = _contexts[ctxId];
+  if (ctx == null) return 0.0;
+  try {
+    return ctx.outputLatency.toDartDouble;
+  } catch (_) {
+    return 0.0;
+  }
+}
+
+Object contextGetSinkId(int ctxId) {
+  final ctx = _contexts[ctxId];
+  if (ctx == null) return 'default';
+  try {
+    final sinkId = ctx.getProperty('sinkId'.toJS);
+    final value = _jsMessageToDart(sinkId);
+    return value ?? 'default';
+  } catch (_) {
+    return 'default';
+  }
+}
+
+Map<String, double> contextGetOutputTimestamp(int ctxId) {
+  final ctx = _contexts[ctxId];
+  if (ctx == null) {
+    return const {'contextTime': 0.0, 'performanceTime': 0.0};
+  }
+  try {
+    final ts = ctx.callMethod('getOutputTimestamp'.toJS) as JSObject;
+    final contextTime =
+        (ts.getProperty('contextTime'.toJS) as JSNumber).toDartDouble;
+    final performanceTime =
+        (ts.getProperty('performanceTime'.toJS) as JSNumber).toDartDouble;
+    return {
+      'contextTime': contextTime,
+      'performanceTime': performanceTime,
+    };
+  } catch (_) {
+    return {
+      'contextTime': contextGetTime(ctxId),
+      'performanceTime': 0.0,
+    };
+  }
+}
+
+int destinationGetMaxChannelCount(int ctxId) {
+  final destinationId = _contextDestinationIds[ctxId];
+  if (destinationId == null) return 2;
+  final destination = _nodes[destinationId];
+  if (destination == null) return 2;
+  try {
+    return (destination.getProperty('maxChannelCount'.toJS) as JSNumber)
+        .toDartInt;
+  } catch (_) {
+    return 2;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Backend API — Node Factory
@@ -253,8 +358,37 @@ int createStereoPanner(int ctxId) {
   return id;
 }
 
+int createPanner(int ctxId) {
+  final node = _contexts[ctxId]!.createPanner();
+  final id = _nextId++;
+  _nodes[id] = node;
+  return id;
+}
+
 int createWaveShaper(int ctxId) {
   final node = _contexts[ctxId]!.createWaveShaper();
+  final id = _nextId++;
+  _nodes[id] = node;
+  return id;
+}
+
+int createConstantSource(int ctxId) {
+  final node = _contexts[ctxId]!.createConstantSource();
+  final id = _nextId++;
+  _nodes[id] = node;
+  return id;
+}
+
+int createConvolver(int ctxId) {
+  final node = _contexts[ctxId]!.createConvolver();
+  final id = _nextId++;
+  _nodes[id] = node;
+  return id;
+}
+
+int createIIRFilter(int ctxId, Float64List feedforward, Float64List feedback) {
+  final node = _contexts[ctxId]!.createIIRFilter(
+      _float64ListToJSArray(feedforward), _float64ListToJSArray(feedback));
   final id = _nextId++;
   _nodes[id] = node;
   return id;
@@ -279,9 +413,11 @@ int createMediaStreamSource(int ctxId, [dynamic stream]) {
     throw UnimplementedError(
         'MediaStreamSource on Web needs explicit stream object');
   }
-  final node = _contexts[ctxId]!.createMediaStreamSource(stream as JSObject);
+  final jsStream = stream as JSObject;
+  final node = _contexts[ctxId]!.createMediaStreamSource(jsStream);
   final id = _nextId++;
   _nodes[id] = node;
+  _mediaStreamSourceStreams[id] = jsStream;
   return id;
 }
 
@@ -290,8 +426,48 @@ int createMediaStreamDestination(int ctxId) {
   final node = ctx.callMethod('createMediaStreamDestination'.toJS) as JSObject;
   final id = _nextId++;
   _nodes[id] = node;
+  try {
+    final stream = node.getProperty('stream'.toJS) as JSObject;
+    _mediaStreamDestinationStreams[id] = stream;
+  } catch (_) {}
   return id;
 }
+
+int createMediaElementSource(int ctxId, [dynamic mediaElement]) {
+  if (mediaElement == null) {
+    throw ArgumentError('mediaElement must not be null on web backend');
+  }
+  final node =
+      _contexts[ctxId]!.createMediaElementSource(mediaElement as JSObject);
+  final id = _nextId++;
+  _nodes[id] = node;
+  return id;
+}
+
+int createMediaStreamTrackSource(int ctxId, [dynamic mediaStreamTrack]) {
+  if (mediaStreamTrack == null) {
+    throw ArgumentError('mediaStreamTrack must not be null on web backend');
+  }
+  final node = _contexts[ctxId]!
+      .createMediaStreamTrackSource(mediaStreamTrack as JSObject);
+  final id = _nextId++;
+  _nodes[id] = node;
+  return id;
+}
+
+int createScriptProcessor(
+    int ctxId, int bufferSize, int inChannels, int outChannels) {
+  final node = _contexts[ctxId]!.createScriptProcessor(
+      bufferSize.toJS, inChannels.toJS, outChannels.toJS);
+  final id = _nextId++;
+  _nodes[id] = node;
+  return id;
+}
+
+dynamic mediaStreamSourceGetStream(int nodeId) =>
+    _mediaStreamSourceStreams[nodeId];
+dynamic mediaStreamDestinationGetStream(int nodeId) =>
+    _mediaStreamDestinationStreams[nodeId];
 
 // ---------------------------------------------------------------------------
 // Worklet & I/O
@@ -490,7 +666,7 @@ extension type JSAudioWorklet._(JSObject _) implements JSObject {
 @JS('AudioWorkletNode')
 extension type JSAudioWorkletNode._(JSObject _) implements JSObject {
   external JSAudioWorkletNode(JSAudioContext context, JSString name);
-  external JSAudioParam get parameters;
+  external JSObject get parameters;
   external JSObject get port; // MessagePort
 }
 
@@ -557,6 +733,8 @@ void removeNode(int ctxId, int nodeId) {
   disconnectAll(ctxId, nodeId);
   _nodes.remove(nodeId);
   _workletPorts.remove(nodeId);
+  _mediaStreamSourceStreams.remove(nodeId);
+  _mediaStreamDestinationStreams.remove(nodeId);
 }
 
 // ---------------------------------------------------------------------------
@@ -608,6 +786,20 @@ void paramCancelAndHold(int nodeId, String paramName, double time) {
   }
 }
 
+void paramSetValueCurve(int nodeId, String paramName, Float32List values,
+    double startTime, double duration) {
+  final param = _getParam(nodeId, paramName);
+  if (param == null || values.isEmpty || duration <= 0) return;
+  try {
+    param.setValueCurveAtTime(values.toJS, startTime.toJS, duration.toJS);
+  } catch (_) {
+    final step = duration / values.length;
+    for (int i = 0; i < values.length; i++) {
+      param.setValueAtTime(values[i].toJS, (startTime + (step * i)).toJS);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Backend API — Oscillator
 // ---------------------------------------------------------------------------
@@ -626,6 +818,14 @@ void oscStart(int nodeId, double when) {
 }
 
 void oscStop(int nodeId, double when) {
+  _nodes[nodeId]?.callMethod('stop'.toJS, when.toJS);
+}
+
+void constantSourceStart(int nodeId, double when) {
+  _nodes[nodeId]?.callMethod('start'.toJS, when.toJS);
+}
+
+void constantSourceStop(int nodeId, double when) {
   _nodes[nodeId]?.callMethod('stop'.toJS, when.toJS);
 }
 
@@ -661,6 +861,55 @@ void filterSetType(int nodeId, int type) {
   }
 }
 
+void biquadGetFrequencyResponse(int nodeId, Float32List frequencyHz,
+    Float32List magResponse, Float32List phaseResponse) {
+  final node = _nodes[nodeId];
+  if (node == null) return;
+  node.callMethod('getFrequencyResponse'.toJS, frequencyHz.toJS,
+      magResponse.toJS, phaseResponse.toJS);
+}
+
+double compressorGetReduction(int nodeId) {
+  final node = _nodes[nodeId];
+  if (node == null) return 0.0;
+  try {
+    return (node.getProperty('reduction'.toJS) as JSNumber).toDartDouble;
+  } catch (_) {
+    return 0.0;
+  }
+}
+
+void convolverSetBuffer(int nodeId, WABuffer? buffer) {
+  final node = _nodes[nodeId];
+  if (node == null) return;
+  if (buffer == null) {
+    node.setProperty('buffer'.toJS, null);
+    return;
+  }
+  final ctx = _contexts.values.first;
+  final jsBuf = ctx.createBuffer(
+    buffer.numberOfChannels.toJS,
+    buffer.length.toJS,
+    buffer.sampleRate.toJS,
+  );
+  for (int ch = 0; ch < buffer.numberOfChannels; ch++) {
+    jsBuf.copyToChannel(buffer.getChannelData(ch).toJS, ch.toJS);
+  }
+  node.setProperty('buffer'.toJS, jsBuf);
+}
+
+void convolverSetNormalize(int nodeId, bool normalize) {
+  _nodes[nodeId]?.setProperty('normalize'.toJS, normalize.toJS);
+}
+
+void iirGetFrequencyResponse(int nodeId, Float32List frequencyHz,
+    Float32List magResponse, Float32List phaseResponse) {
+  final node = _nodes[nodeId];
+  if (node == null) return;
+  node.callMethod('getFrequencyResponse'.toJS, frequencyHz.toJS,
+      magResponse.toJS, phaseResponse.toJS);
+}
+
 // ---------------------------------------------------------------------------
 // Backend API — BufferSource
 // ---------------------------------------------------------------------------
@@ -686,6 +935,17 @@ void bufferSourceStart(int nodeId, [double when = 0]) {
   _nodes[nodeId]?.callMethod('start'.toJS, when.toJS);
 }
 
+void bufferSourceStartAdvanced(int nodeId, double when,
+    [double offset = 0, double? duration]) {
+  final node = _nodes[nodeId];
+  if (node == null) return;
+  if (duration == null) {
+    node.callMethod('start'.toJS, when.toJS, offset.toJS);
+  } else {
+    node.callMethod('start'.toJS, when.toJS, offset.toJS, duration.toJS);
+  }
+}
+
 void bufferSourceStop(int nodeId, [double when = 0]) {
   _nodes[nodeId]?.callMethod('stop'.toJS, when.toJS);
 }
@@ -694,12 +954,32 @@ void bufferSourceSetLoop(int nodeId, bool loop) {
   _nodes[nodeId]?.setProperty('loop'.toJS, loop.toJS);
 }
 
+void bufferSourceSetLoopStart(int nodeId, double loopStart) {
+  _nodes[nodeId]?.setProperty('loopStart'.toJS, loopStart.toJS);
+}
+
+void bufferSourceSetLoopEnd(int nodeId, double loopEnd) {
+  _nodes[nodeId]?.setProperty('loopEnd'.toJS, loopEnd.toJS);
+}
+
 // ---------------------------------------------------------------------------
 // Backend API — Analyser
 // ---------------------------------------------------------------------------
 
 void analyserSetFftSize(int nodeId, int size) {
   _nodes[nodeId]?.setProperty('fftSize'.toJS, size.toJS);
+}
+
+void analyserSetMinDecibels(int nodeId, double value) {
+  _nodes[nodeId]?.setProperty('minDecibels'.toJS, value.toJS);
+}
+
+void analyserSetMaxDecibels(int nodeId, double value) {
+  _nodes[nodeId]?.setProperty('maxDecibels'.toJS, value.toJS);
+}
+
+void analyserSetSmoothingTimeConstant(int nodeId, double value) {
+  _nodes[nodeId]?.setProperty('smoothingTimeConstant'.toJS, value.toJS);
 }
 
 Uint8List analyserGetByteFrequencyData(int nodeId, int len) {
@@ -749,6 +1029,45 @@ void waveShaperSetOversample(int nodeId, int type) {
   if (node != null && type < _oversampleTypes.length) {
     node.setProperty('oversample'.toJS, _oversampleTypes[type].toJS);
   }
+}
+
+const _distanceModels = ['linear', 'inverse', 'exponential'];
+const _panningModels = ['equalpower', 'HRTF'];
+
+void pannerSetPanningModel(int nodeId, int model) {
+  final node = _nodes[nodeId];
+  if (node == null || model < 0 || model >= _panningModels.length) return;
+  node.setProperty('panningModel'.toJS, _panningModels[model].toJS);
+}
+
+void pannerSetDistanceModel(int nodeId, int model) {
+  final node = _nodes[nodeId];
+  if (node == null || model < 0 || model >= _distanceModels.length) return;
+  node.setProperty('distanceModel'.toJS, _distanceModels[model].toJS);
+}
+
+void pannerSetRefDistance(int nodeId, double value) {
+  _nodes[nodeId]?.setProperty('refDistance'.toJS, value.toJS);
+}
+
+void pannerSetMaxDistance(int nodeId, double value) {
+  _nodes[nodeId]?.setProperty('maxDistance'.toJS, value.toJS);
+}
+
+void pannerSetRolloffFactor(int nodeId, double value) {
+  _nodes[nodeId]?.setProperty('rolloffFactor'.toJS, value.toJS);
+}
+
+void pannerSetConeInnerAngle(int nodeId, double value) {
+  _nodes[nodeId]?.setProperty('coneInnerAngle'.toJS, value.toJS);
+}
+
+void pannerSetConeOuterAngle(int nodeId, double value) {
+  _nodes[nodeId]?.setProperty('coneOuterAngle'.toJS, value.toJS);
+}
+
+void pannerSetConeOuterGain(int nodeId, double value) {
+  _nodes[nodeId]?.setProperty('coneOuterGain'.toJS, value.toJS);
 }
 
 // ---------------------------------------------------------------------------

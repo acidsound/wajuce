@@ -1,3 +1,13 @@
+## 0.2.0
+
+* **Agent Install Automation**: Added cross-platform executable installer and verifier scripts for first-time integration:
+  * `tool/install_wajuce.dart`
+  * `tool/verify_wajuce.dart`
+  * Shared command utility: `tool/_wajuce_cli.dart`
+* **Windows-Focused Guardrails**: Added deterministic host/toolchain gating for Windows targets (`windows` desktop and `android` on Windows) via `flutter doctor -v` checks and explicit host compatibility failures.
+* **Path Source Reliability**: Added JUCE path-source validation and submodule bootstrap logic for local/path dependency flows.
+* **Docs Refresh**: Added new-project quick start and deterministic agent-install usage in `README.md`; converted `SKILLS.md` into an orchestration playbook that delegates execution to scripts.
+
 ## 0.1.5
 
 * **Interface Coverage Expansion**: Added Web Audio 1.1 surface for `AudioScheduledSourceNode`, `ConstantSourceNode`, `ConvolverNode`, `IIRFilterNode`, `PannerNode`, `MediaElementAudioSourceNode`, and `MediaStreamTrackAudioSourceNode`.

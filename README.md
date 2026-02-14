@@ -19,6 +19,68 @@
 
 ---
 
+## 🚀 Quick Start (New Flutter App)
+
+```bash
+flutter create my_audio_app
+cd my_audio_app
+flutter pub add wajuce
+flutter pub get
+```
+
+Use it in code:
+
+```dart
+import 'package:wajuce/wajuce.dart';
+
+Future<void> startAudio() async {
+  final ctx = WAContext();
+  await ctx.resume();
+
+  final osc = ctx.createOscillator();
+  final gain = ctx.createGain();
+  gain.gain.value = 0.1;
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start();
+}
+```
+
+### Windows Notes
+
+- Building **Android** on Windows requires Android SDK/NDK/CMake and accepted licenses.
+- Building a **Windows executable** requires Visual Studio with Desktop C++ workload.
+
+---
+
+## 🤖 Deterministic Agent Install (Cross-Platform)
+
+From this repository root, run installer scripts against your app path:
+
+macOS/Linux:
+
+```bash
+dart run tool/install_wajuce.dart --app-root /absolute/path/to/my_audio_app --source pub --target android
+dart run tool/verify_wajuce.dart --app-root /absolute/path/to/my_audio_app --target android
+```
+
+Windows (PowerShell):
+
+```powershell
+dart run tool/install_wajuce.dart --app-root C:\work\my_audio_app --source pub --target windows
+dart run tool/verify_wajuce.dart --app-root C:\work\my_audio_app --target windows
+```
+
+Path source install (local plugin checkout):
+
+```bash
+dart run tool/install_wajuce.dart --app-root /absolute/path/to/my_audio_app --source path --wajuce-path /absolute/path/to/wajuce --target web
+dart run tool/verify_wajuce.dart --app-root /absolute/path/to/my_audio_app --source path --wajuce-path /absolute/path/to/wajuce --target web
+```
+
+---
+
 ## 🏗️ Architecture
 
 `wajuce` is built on a multi-backend architecture that ensures code portability across all platforms:
@@ -143,9 +205,15 @@ This project includes specialized **AI Skills** to help agents maintain the deve
 
 - **JUCE Management (`juce_setup`)**: Automated detection and setup of the JUCE framework.
   - Located at: `.agent/skills/juce_management/SKILL.md`
-  - Purpose: Fixes broken dependencies, handles symlinks, and configures submodules.
+  - Purpose: Fixes broken dependencies and configures JUCE submodules.
+- **Install scripts**:
+  - `tool/install_wajuce.dart`
+  - `tool/verify_wajuce.dart`
+  - Purpose: deterministic first-time installation and validation for macOS/Linux/Windows.
 
-To use these skills, simply ask your AI agent: *"Help me set up the JUCE environment using the available skills."*
+To use these assets, ask your AI agent:
+- "Use `SKILLS.md` and run `tool/install_wajuce.dart` for this app."
+- "Then run `tool/verify_wajuce.dart` and report pass/fail checks."
 
 ---
 

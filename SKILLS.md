@@ -1,30 +1,55 @@
-# Flutter FFI & C++ (JUCE) Integration Guidelines
+# wajuce Install Skill Orchestration
 
-This document summarizes troubleshooting experiences and best practices for building high-performance audio libraries using Flutter FFI and JUCE.
+Use this file as an agent playbook.  
+Do not re-implement shell logic. Always call the executable scripts in `tool/`.
 
-## 1. Native Build Strategy: Unity Build
-For Apple platforms (iOS/macOS), the most reliable way to integrate JUCE into a Flutter FFI plugin is through a **Unity Build** file.
+## Inputs
 
-- **Problem**: CocoaPods does not natively support complex CMake-based projects like JUCE reliably within the plugin's `podspec`.
-- **Solution**: Create a single `.mm` (Objective-C++) file that includes all required JUCE module `.mm` files and your engine's `.cpp` source.
-- **Benefit**: All symbols are compiled into a single translation unit, avoiding linking errors and allowing easy passing of compiler flags via `pod_target_xcconfig`.
+- `APP_ROOT` (required): absolute path to target Flutter app
+- `SOURCE` (optional): `pub` (default) or `path`
+- `WAJUCE_PATH` (required only when `SOURCE=path`)
+- `TARGET` (optional): `none` (default), `web`, `android`, `ios`, `macos`, `windows`
 
-## 2. API Alignment & Naming
-Transitioning from a prototype to a full implementation often reveals naming mismatches.
+## Required Execution Order
 
-- **Naming Strategy**: Avoid lengthy names like `wajuce_oscillator_set_frequency`. Use concise, consistent prefixes for the C-API:
-  - `oscSetFreq`
-  - `ctxGetTime`
-  - `bufSrcStart`
-- **Mismatches**: Always verify that the Dart FFI lookup matches the exact symbol name in the C header. Use `dart analyze` to catch missing function calls across the Dart side.
+Run from this repository root:
 
-## 3. Web Interop (Phase 6)
-Web platforms should **not** use JUCE. Use `dart:js_interop` to bridge to the browser's native Web Audio API.
+1. Install:
 
-- **ID Mapping**: Maintain an integer-to-JSObject map in the web backend. This allows the Dart frontend to remain agnostic of the underlying object type (Native ID vs JS Reference).
-- **Conditional Imports**: Use `export 'stub.dart' if (dart.library.js_interop) 'web.dart' if (dart.library.ffi) 'native.dart';` to ensure the correct backend is linked at build time.
+```bash
+dart run tool/install_wajuce.dart --app-root "$APP_ROOT" --source "$SOURCE" --target "$TARGET"
+```
 
-## 4. Troubleshooting Edge Cases
-- **SDK Compatibility**: New macOS/iOS SDKs (e.g., SDK 26.2) may break older JUCE versions (missing `NSUniquePtr`, `CFObjectHolder`). If native builds fail with "no template named...", check the SDK version compatibility.
-- **FFI Memory**: When passing arrays to native code (e.g., `setCurve`), use `package:ffi` (`calloc` or `malloc`) and **always** free the memory after the call if the native side does not take ownership.
-- **Sample Rate Types**: Web Audio API often uses `double` for sample rate, while JUCE might expect `int` in some C-API bridges. Use `num` in Dart to handle both flexibly.
+2. Verify:
+
+```bash
+dart run tool/verify_wajuce.dart --app-root "$APP_ROOT" --target "$TARGET"
+```
+
+If `SOURCE=path`, append:
+
+```bash
+--wajuce-path "$WAJUCE_PATH"
+```
+
+## Windows-Specific Target Guidance
+
+- `TARGET=android` on Windows:
+  - Script enforces `flutter doctor -v` Android toolchain status check.
+- `TARGET=windows` on Windows:
+  - Script enforces `flutter doctor -v` Visual Studio status check.
+- `TARGET=ios` or `TARGET=macos`:
+  - Must run on macOS host; script hard-fails on non-macOS.
+
+## Agent Output Contract
+
+After running, return:
+
+1. Inputs used (`APP_ROOT`, `SOURCE`, `TARGET`)
+2. Install command and verify command (exact)
+3. DoD status:
+   - `pubspec.yaml` has `wajuce`
+   - `flutter pub get` success
+   - `flutter pub deps` includes `wajuce`
+   - target build check result (or skipped)
+4. Failure path (if any): failing command + next corrective action

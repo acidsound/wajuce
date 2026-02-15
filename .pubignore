@@ -42,3 +42,6 @@ example/build_log.txt
 example/ios_build_log.txt
 example/ios_sim_*.png
 example/running_demo.mp4
+example/captures/
+example/integration_test/
+tool/tutorial_capture/

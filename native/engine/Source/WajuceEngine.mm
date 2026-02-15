@@ -4,6 +4,7 @@
 
 #include "WajuceEngine.h"
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -118,6 +119,8 @@ Engine::Engine(double sr, int bs, int inCh, int outCh)
   auto err = deviceManager.initialiseWithDefaultDevices(inCh, outCh);
   deviceManager.addAudioCallback(&sourcePlayer);
   sourcePlayer.setSource(this);
+  preferredRenderSampleRate.store(sampleRate, std::memory_order_relaxed);
+  preferredRenderBitDepth.store(32, std::memory_order_relaxed);
 }
 
 Engine::~Engine() {
@@ -154,6 +157,7 @@ void Engine::getNextAudioBlock(const juce::AudioSourceChannelInfo &info) {
   // proxy.clear(); // DO NOT CLEAR - We need physical input from info.buffer
   juce::MidiBuffer midi;
   graph->processBlock(proxy, midi);
+  applyLoFiPostProcess(proxy);
 
   totalSamplesProcessed += info.numSamples;
   currentTime.store((double)totalSamplesProcessed / sampleRate,
@@ -166,6 +170,120 @@ void Engine::close() {
   state = 2;
   sourcePlayer.setSource(nullptr);
   deviceManager.removeAudioCallback(&sourcePlayer);
+}
+
+int Engine::getCurrentBitDepth() const {
+  auto *device = deviceManager.getCurrentAudioDevice();
+  if (device == nullptr)
+    return 32;
+  const int bitDepth = device->getCurrentBitDepth();
+  return bitDepth > 0 ? bitDepth : 32;
+}
+
+bool Engine::setPreferredSampleRate(double preferredSampleRate) {
+  if (preferredSampleRate <= 0.0) {
+    return false;
+  }
+
+  preferredRenderSampleRate.store(preferredSampleRate, std::memory_order_relaxed);
+
+  juce::AudioDeviceManager::AudioDeviceSetup setup;
+  deviceManager.getAudioDeviceSetup(setup);
+
+  if (std::abs(setup.sampleRate - preferredSampleRate) > 0.5) {
+    setup.sampleRate = preferredSampleRate;
+    const auto err = deviceManager.setAudioDeviceSetup(setup, true);
+    if (err.isNotEmpty()) {
+      WA_LOG("[wajuce] device sample-rate switch failed, using software downsample: %s",
+             err.toRawUTF8());
+    }
+  }
+
+  if (auto *device = deviceManager.getCurrentAudioDevice()) {
+    const auto deviceSampleRate = device->getCurrentSampleRate();
+    if (deviceSampleRate > 0.0) {
+      sampleRate = deviceSampleRate;
+    }
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(graphMtx);
+    const int inCh = graph->getMainBusNumInputChannels();
+    const int outCh = graph->getMainBusNumOutputChannels();
+    graph->setPlayConfigDetails(inCh, outCh, sampleRate, bufferSize);
+    graph->prepareToPlay(sampleRate, bufferSize);
+  }
+
+  if (preferredSampleRate < sampleRate - 1.0) {
+    WA_LOG("[wajuce] applying software sample-rate reduction: device=%0.1f, target=%0.1f",
+           sampleRate, preferredSampleRate);
+  }
+
+  return true;
+}
+
+void Engine::applyLoFiPostProcess(juce::AudioBuffer<float> &buffer) {
+  const int channels = buffer.getNumChannels();
+  const int frames = buffer.getNumSamples();
+  if (channels <= 0 || frames <= 0) {
+    return;
+  }
+
+  const double deviceRate = sampleRate;
+  const double targetRate =
+      preferredRenderSampleRate.load(std::memory_order_relaxed);
+  const bool shouldReduceRate =
+      targetRate > 0.0 && deviceRate > 0.0 && targetRate < (deviceRate - 1.0);
+
+  if (shouldReduceRate) {
+    const double holdLength = juce::jmax(1.0, deviceRate / targetRate);
+    if ((int)sampleRateHoldValues.size() < channels) {
+      sampleRateHoldValues.resize((size_t)channels, 0.0f);
+    }
+
+    for (int i = 0; i < frames; ++i) {
+      if (sampleRateHoldPhase <= 0.0) {
+        for (int ch = 0; ch < channels; ++ch) {
+          sampleRateHoldValues[(size_t)ch] = buffer.getSample(ch, i);
+        }
+        sampleRateHoldPhase += holdLength;
+      }
+      for (int ch = 0; ch < channels; ++ch) {
+        buffer.setSample(ch, i, sampleRateHoldValues[(size_t)ch]);
+      }
+      sampleRateHoldPhase -= 1.0;
+    }
+  } else {
+    sampleRateHoldPhase = 0.0;
+  }
+
+  int bitDepth = preferredRenderBitDepth.load(std::memory_order_relaxed);
+  bitDepth = juce::jlimit(2, 32, bitDepth);
+  if (bitDepth >= 32) {
+    return;
+  }
+
+  const double maxInt = std::pow(2.0, bitDepth - 1) - 1.0;
+  if (maxInt <= 0.0) {
+    return;
+  }
+
+  for (int ch = 0; ch < channels; ++ch) {
+    float *data = buffer.getWritePointer(ch);
+    for (int i = 0; i < frames; ++i) {
+      const float clamped = juce::jlimit(-1.0f, 1.0f, data[i]);
+      data[i] = (float)(std::round((double)clamped * maxInt) / maxInt);
+    }
+  }
+}
+
+bool Engine::setPreferredBitDepth(int preferredBitDepth) {
+  if (preferredBitDepth < 2 || preferredBitDepth > 32) {
+    return false;
+  }
+
+  preferredRenderBitDepth.store(preferredBitDepth, std::memory_order_relaxed);
+  return true;
 }
 
 // ============================================================================
@@ -964,6 +1082,20 @@ FFI_PLUGIN_EXPORT double wajuce_context_get_time(int32_t id) {
 FFI_PLUGIN_EXPORT double wajuce_context_get_sample_rate(int32_t id) {
   auto *e = getEngine(id);
   return e ? e->getSampleRate() : 44100.0;
+}
+FFI_PLUGIN_EXPORT int32_t wajuce_context_get_bit_depth(int32_t id) {
+  auto *e = getEngine(id);
+  return e ? e->getCurrentBitDepth() : 32;
+}
+FFI_PLUGIN_EXPORT int32_t
+wajuce_context_set_preferred_sample_rate(int32_t id, double preferred_sr) {
+  auto *e = getEngine(id);
+  return (e && e->setPreferredSampleRate(preferred_sr)) ? 1 : 0;
+}
+FFI_PLUGIN_EXPORT int32_t
+wajuce_context_set_preferred_bit_depth(int32_t id, int32_t preferred_bit_depth) {
+  auto *e = getEngine(id);
+  return (e && e->setPreferredBitDepth(preferred_bit_depth)) ? 1 : 0;
 }
 FFI_PLUGIN_EXPORT int32_t wajuce_context_get_state(int32_t id) {
   auto *e = getEngine(id);

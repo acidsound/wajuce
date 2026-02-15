@@ -47,6 +47,11 @@ typedef _CtxDoubleD = double Function(int);
 typedef _CtxIntN = ffi.Int32 Function(ffi.Int32);
 typedef _CtxIntD = int Function(int);
 
+typedef _CtxSetPreferredSampleRateN = ffi.Int32 Function(ffi.Int32, ffi.Double);
+typedef _CtxSetPreferredSampleRateD = int Function(int, double);
+typedef _CtxSetPreferredBitDepthN = ffi.Int32 Function(ffi.Int32, ffi.Int32);
+typedef _CtxSetPreferredBitDepthD = int Function(int, int);
+
 // Node factory
 typedef _CreateNodeN = ffi.Int32 Function(ffi.Int32);
 typedef _CreateNodeD = int Function(int);
@@ -182,6 +187,14 @@ final _contextGetTime =
     _lib.lookupFunction<_CtxDoubleN, _CtxDoubleD>('wajuce_context_get_time');
 final _contextGetSampleRate = _lib
     .lookupFunction<_CtxDoubleN, _CtxDoubleD>('wajuce_context_get_sample_rate');
+final _contextGetBitDepth =
+    _lib.lookupFunction<_CtxIntN, _CtxIntD>('wajuce_context_get_bit_depth');
+final _contextSetPreferredSampleRate = _lib.lookupFunction<
+    _CtxSetPreferredSampleRateN,
+    _CtxSetPreferredSampleRateD>('wajuce_context_set_preferred_sample_rate');
+final _contextSetPreferredBitDepth =
+    _lib.lookupFunction<_CtxSetPreferredBitDepthN, _CtxSetPreferredBitDepthD>(
+        'wajuce_context_set_preferred_bit_depth');
 final _contextGetState =
     _lib.lookupFunction<_CtxIntN, _CtxIntD>('wajuce_context_get_state');
 final _contextResume =
@@ -413,6 +426,11 @@ int contextCreate(int sampleRate, int bufferSize,
 void contextDestroy(int ctxId) => _contextDestroy(ctxId);
 double contextGetTime(int ctxId) => _contextGetTime(ctxId);
 double contextGetSampleRate(int ctxId) => _contextGetSampleRate(ctxId);
+int contextGetBitDepth(int ctxId) => _contextGetBitDepth(ctxId);
+bool contextSetPreferredSampleRate(int ctxId, double sampleRate) =>
+    _contextSetPreferredSampleRate(ctxId, sampleRate) != 0;
+bool contextSetPreferredBitDepth(int ctxId, int bitDepth) =>
+    _contextSetPreferredBitDepth(ctxId, bitDepth) != 0;
 int contextGetState(int ctxId) => _contextGetState(ctxId);
 void contextResume(int ctxId) => _contextResume(ctxId);
 void contextSuspend(int ctxId) => _contextSuspend(ctxId);

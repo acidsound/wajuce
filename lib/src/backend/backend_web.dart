@@ -166,7 +166,9 @@ JSArray _float64ListToJSArray(Float64List values) =>
 
 int contextCreate(int sampleRate, int bufferSize,
     {int inputChannels = 2, int outputChannels = 2}) {
-  final ctx = JSAudioContext();
+  final options = JSObject();
+  options.setProperty('sampleRate'.toJS, sampleRate.toJS);
+  final ctx = JSAudioContext(options);
   final id = _nextId++;
   _contexts[id] = ctx;
   final destinationId = _nextId++;
@@ -199,6 +201,12 @@ double contextGetSampleRate(int ctxId) {
   final ctx = _contexts[ctxId];
   return ctx?.sampleRate.toDartDouble ?? 44100.0;
 }
+
+int contextGetBitDepth(int ctxId) => 32;
+
+bool contextSetPreferredSampleRate(int ctxId, double sampleRate) => false;
+
+bool contextSetPreferredBitDepth(int ctxId, int bitDepth) => false;
 
 int contextGetState(int ctxId) {
   final ctx = _contexts[ctxId];

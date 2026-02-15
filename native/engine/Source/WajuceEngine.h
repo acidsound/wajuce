@@ -19,6 +19,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace wajuce {
 
@@ -42,6 +43,9 @@ public:
   int getState() const { return state.load(); }
   double getCurrentTime() const { return currentTime.load(); }
   double getSampleRate() const { return sampleRate; }
+  int getCurrentBitDepth() const;
+  bool setPreferredSampleRate(double preferredSampleRate);
+  bool setPreferredBitDepth(int preferredBitDepth);
   int32_t getDestinationId() const { return 0; } // destination is always ID 0
 
   // Node factory
@@ -128,6 +132,7 @@ private:
   std::mutex graphMtx;
 
   void processAutomation(double startTime, double sampleRate, int numSamples);
+  void applyLoFiPostProcess(juce::AudioBuffer<float> &buffer);
 
   struct FeedbackConnection {
     int32_t srcId;
@@ -142,6 +147,10 @@ private:
 
   double sampleRate;
   int bufferSize;
+  std::atomic<double> preferredRenderSampleRate{0.0};
+  std::atomic<int> preferredRenderBitDepth{32};
+  std::vector<float> sampleRateHoldValues;
+  double sampleRateHoldPhase = 0.0;
   std::atomic<double> currentTime{0.0};
   std::atomic<int> state{0}; // 0=suspended
   int64_t totalSamplesProcessed = 0;

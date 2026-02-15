@@ -31,6 +31,13 @@ FFI_PLUGIN_EXPORT int32_t wajuce_context_create(int32_t sample_rate,
 FFI_PLUGIN_EXPORT void wajuce_context_destroy(int32_t ctx_id);
 FFI_PLUGIN_EXPORT double wajuce_context_get_time(int32_t ctx_id);
 FFI_PLUGIN_EXPORT double wajuce_context_get_sample_rate(int32_t ctx_id);
+FFI_PLUGIN_EXPORT int32_t wajuce_context_get_bit_depth(int32_t ctx_id);
+FFI_PLUGIN_EXPORT int32_t
+wajuce_context_set_preferred_sample_rate(int32_t ctx_id,
+                                         double preferred_sample_rate);
+FFI_PLUGIN_EXPORT int32_t
+wajuce_context_set_preferred_bit_depth(int32_t ctx_id,
+                                       int32_t preferred_bit_depth);
 FFI_PLUGIN_EXPORT int32_t wajuce_context_get_state(int32_t ctx_id);
 FFI_PLUGIN_EXPORT void wajuce_context_resume(int32_t ctx_id);
 FFI_PLUGIN_EXPORT void wajuce_context_suspend(int32_t ctx_id);

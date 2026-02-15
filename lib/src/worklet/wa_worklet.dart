@@ -36,6 +36,18 @@ class WAWorklet {
     }
   }
 
+  /// Current context sample-rate (actual device rate when available).
+  ///
+  /// On native this may differ from the requested constructor sample-rate,
+  /// especially on iOS devices that run at 48kHz by default.
+  double get currentSampleRate {
+    final sr = backend.contextGetSampleRate(contextId);
+    if (sr.isFinite && sr > 0) {
+      return sr;
+    }
+    return sampleRate.toDouble();
+  }
+
   /// Internal: Add a listener for a specific node.
   void addMessageListener(int nodeId, void Function(dynamic) callback) {
     _listeners[nodeId] = callback;
@@ -63,8 +75,9 @@ class WAWorklet {
   /// On native, this resolves the Dart module from [WAWorkletModules].
   Future<void> addModule(String moduleIdentifier) async {
     if (!_isolateStarted) {
+      final sr = currentSampleRate.round();
       await _isolateManager.start(
-        sampleRate: sampleRate,
+        sampleRate: sr > 0 ? sr : sampleRate,
         bufferSize: 128,
       );
       _isolateStarted = true;

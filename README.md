@@ -16,6 +16,7 @@
 - **Zero-Overhead FFI**: Uses Dart FFI for fast communication between Dart and C++ without MethodChannel overhead.
 - **AudioWorklet Support**: Native uses high-priority Dart Isolates; Web uses browser AudioWorklet via `dart:js_interop`.
 - **Feedback Loops**: Built-in `FeedbackBridge` automatically handles cyclic connections in the node graph (1-block delay).
+- **Lo-Fi Render Targets (Example)**: Example app settings support low sample-rate/bit-depth render targets (`8k/11.025k/22.05k`, `4/8/12-bit`) with clear `Device I/O` vs `Render target` separation.
 
 ---
 
@@ -78,6 +79,17 @@ Path source install (local plugin checkout):
 dart run tool/install_wajuce.dart --app-root /absolute/path/to/my_audio_app --source path --wajuce-path /absolute/path/to/wajuce --target web
 dart run tool/verify_wajuce.dart --app-root /absolute/path/to/my_audio_app --source path --wajuce-path /absolute/path/to/wajuce --target web
 ```
+
+---
+
+## 🎬 Tutorial Capture Automation (iOS Simulator)
+
+For reproducible screen + audio capture and LRC timeline generation, see:
+
+- `doc/ios_sim_tutorial_capture.md`
+- `tool/tutorial_capture/capture_ios_demo.sh`
+- `tool/tutorial_capture/sync_and_mux.sh`
+- `tool/tutorial_capture/generate_lrc.sh`
 
 ---
 

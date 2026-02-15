@@ -36,7 +36,7 @@ class WAWorkletNode extends WANode {
   })  : _processorName = processorName,
         _worklet = worklet {
     final effectiveDefaults = <String, double>{
-      'sampleRate': worklet.sampleRate.toDouble(),
+      'sampleRate': worklet.currentSampleRate,
       ...parameterDefaults,
     };
 

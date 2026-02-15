@@ -48,12 +48,19 @@ class WAContext {
   late final WAAudioListener _listener;
   late final WAAudioRenderCapacity _renderCapacity;
   late final WAWorklet _worklet;
+  int _requestedSampleRate = 44100;
+  int _requestedBufferSize = 512;
+  int _requestedNumberOfChannels = 2;
+  int _requestedBitDepth = 32;
 
   /// Creates a new AudioContext.
   WAContext(
       {int sampleRate = 44100,
       int bufferSize = 512,
       int numberOfChannels = 2}) {
+    _requestedSampleRate = sampleRate;
+    _requestedBufferSize = bufferSize;
+    _requestedNumberOfChannels = numberOfChannels;
     _ctxId = backend.contextCreate(sampleRate, bufferSize,
         inputChannels: numberOfChannels, outputChannels: numberOfChannels);
     final destId = backend.contextGetDestinationId(_ctxId);
@@ -65,6 +72,7 @@ class WAContext {
     _listener = WAAudioListener(nodeId: backend.contextGetListenerId(_ctxId));
     _renderCapacity = WAAudioRenderCapacity(_ctxId);
     _worklet = WAWorklet(contextId: _ctxId, sampleRate: sampleRate);
+    _requestedBitDepth = backend.contextGetBitDepth(_ctxId);
 
     // Initialize Web AudioWorklet if on Web
     backend.webInitializeWorklet(_ctxId);
@@ -72,6 +80,8 @@ class WAContext {
 
   /// Internal constructor for subclasses (OfflineAudioContext).
   WAContext.fromId(this._ctxId) {
+    _requestedSampleRate = backend.contextGetSampleRate(_ctxId).round();
+    _requestedBitDepth = backend.contextGetBitDepth(_ctxId);
     _worklet = WAWorklet(contextId: _ctxId);
     final destId = backend.contextGetDestinationId(_ctxId);
     _destination = WADestinationNode(
@@ -105,6 +115,21 @@ class WAContext {
 
   /// The sample rate of this context.
   double get sampleRate => backend.contextGetSampleRate(_ctxId);
+
+  /// Effective device bit depth when available.
+  int get bitDepth => backend.contextGetBitDepth(_ctxId);
+
+  /// Requested sample rate used when creating this context.
+  int get requestedSampleRate => _requestedSampleRate;
+
+  /// Requested buffer size used when creating this context.
+  int get requestedBufferSize => _requestedBufferSize;
+
+  /// Requested I/O channel count used when creating this context.
+  int get requestedNumberOfChannels => _requestedNumberOfChannels;
+
+  /// Requested bit depth preference.
+  int get requestedBitDepth => _requestedBitDepth;
 
   /// Base processing latency (seconds) when available.
   double get baseLatency => backend.contextGetBaseLatency(_ctxId);
@@ -150,6 +175,35 @@ class WAContext {
   /// Resume audio processing.
   Future<void> resume() async => backend.contextResume(_ctxId);
 
+  /// Ask backend to switch to a preferred device sample-rate.
+  ///
+  /// Returns `true` if the request was accepted by the backend/device.
+  Future<bool> setPreferredSampleRate(double preferredSampleRate) async {
+    if (preferredSampleRate <= 0) {
+      return false;
+    }
+    final ok =
+        backend.contextSetPreferredSampleRate(_ctxId, preferredSampleRate);
+    if (ok) {
+      _requestedSampleRate = preferredSampleRate.round();
+    }
+    return ok;
+  }
+
+  /// Ask backend to switch to a preferred device bit-depth.
+  ///
+  /// Not all backends/devices support changing bit-depth at runtime.
+  Future<bool> setPreferredBitDepth(int preferredBitDepth) async {
+    if (preferredBitDepth <= 0) {
+      return false;
+    }
+    final ok = backend.contextSetPreferredBitDepth(_ctxId, preferredBitDepth);
+    if (ok) {
+      _requestedBitDepth = preferredBitDepth;
+    }
+    return ok;
+  }
+
   /// Suspend audio processing.
   Future<void> suspend() async => backend.contextSuspend(_ctxId);
 
@@ -158,6 +212,36 @@ class WAContext {
     _renderCapacity.stop();
     backend.contextClose(_ctxId);
     await _worklet.close();
+  }
+
+  /// Recreate this context with updated audio device preferences.
+  ///
+  /// This closes the current context and returns a fresh context instance.
+  Future<WAContext> recreate({
+    int? sampleRate,
+    int? bufferSize,
+    int? numberOfChannels,
+    int? bitDepth,
+    bool autoResume = true,
+  }) async {
+    final nextSampleRate = sampleRate ?? _requestedSampleRate;
+    final nextBufferSize = bufferSize ?? _requestedBufferSize;
+    final nextChannels = numberOfChannels ?? _requestedNumberOfChannels;
+    final nextBitDepth = bitDepth ?? _requestedBitDepth;
+
+    await close();
+
+    final next = WAContext(
+      sampleRate: nextSampleRate,
+      bufferSize: nextBufferSize,
+      numberOfChannels: nextChannels,
+    );
+    if (autoResume) {
+      await next.resume();
+      await next.setPreferredSampleRate(nextSampleRate.toDouble());
+      await next.setPreferredBitDepth(nextBitDepth);
+    }
+    return next;
   }
 
   // -------------------------------------------------------------------------

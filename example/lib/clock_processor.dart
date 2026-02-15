@@ -36,6 +36,7 @@ class ClockProcessor extends WAWorkletProcessor {
   bool _running = false;
   int _currentFrame = 0;
   double _nextTickFrame = 0.0;
+  double _lastTickFrame = 0.0;
   int _step = 0;
 
   ClockProcessor() : super(name: _clockProcessorName);
@@ -54,18 +55,41 @@ class ClockProcessor extends WAWorkletProcessor {
           _currentFrame = 0;
           _step = 0;
           _nextTickFrame = 0.0;
+          _lastTickFrame = 0.0;
           _contextStartTime = (data['contextTime'] as num?)?.toDouble() ?? 0.0;
         } else if (data['type'] == 'stop') {
           _running = false;
         } else if (data['type'] == 'bpm') {
           final nextBpm = (data['value'] as num?)?.toDouble() ?? _bpm;
+          final oldFramesPer16th = _framesPer16th;
           _bpm = nextBpm > 1 ? nextBpm : 1.0;
           if (_running) {
-            _nextTickFrame = _currentFrame.toDouble() + _framesPer16th;
+            final currentFrame = _currentFrame.toDouble();
+            final newFramesPer16th = _framesPer16th;
+
+            if (oldFramesPer16th > 0 && newFramesPer16th > 0) {
+              // Keep musical phase continuous across BPM changes.
+              double elapsedInStep = currentFrame - _lastTickFrame;
+              if (elapsedInStep < 0) elapsedInStep = 0;
+              if (elapsedInStep > oldFramesPer16th) {
+                elapsedInStep = oldFramesPer16th;
+              }
+
+              final phase = elapsedInStep / oldFramesPer16th;
+              double remaining = 1.0 - phase;
+              if (remaining < 0) remaining = 0;
+              if (remaining > 1) remaining = 1;
+
+              _nextTickFrame = currentFrame + (remaining * newFramesPer16th);
+            } else {
+              _nextTickFrame = currentFrame + newFramesPer16th;
+            }
           }
         } else if (data['type'] == 'syncTime') {
-          _contextStartTime =
+          final syncContextTime =
               (data['contextTime'] as num?)?.toDouble() ?? _contextStartTime;
+          // Keep frame->contextTime mapping continuous when syncing mid-play.
+          _contextStartTime = syncContextTime - (_currentFrame / _sampleRate);
         }
       }
     };
@@ -106,6 +130,7 @@ class ClockProcessor extends WAWorkletProcessor {
           'step': _step,
           'time': scheduledTime,
         });
+        _lastTickFrame = _nextTickFrame;
         _step = (_step + 1) % 16;
       }
       _nextTickFrame += framesPer16th;

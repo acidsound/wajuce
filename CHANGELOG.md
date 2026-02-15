@@ -1,3 +1,11 @@
+## 0.2.2
+
+* **Audio Settings UX**: Added explicit split between `Device I/O` (actual hardware format) and `Render target` (requested render format) to prevent sample-rate/bit-depth confusion on iOS.
+* **Lo-Fi Render Targets**: Added low-fi render options in the example settings UI (`8000/11025/22050 Hz`, `4/8/12-bit`) alongside standard values.
+* **Native Lo-Fi Processing**: Added software sample-rate reduction and bit-crush post-processing so render target changes remain clearly audible even when device hardware stays at 48 kHz.
+* **Context Recreate Stability**: Fixed no-sound cases after applying audio settings by forcing tab state/node recreation when the audio context is replaced.
+* **Docs/Packaging**: Renamed top-level docs directory to `doc/` for pub layout convention and updated references.
+
 ## 0.2.1
 
 * **Documentation Accuracy**: Synchronized README feature/status wording with current implementation details.

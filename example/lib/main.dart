@@ -12,6 +12,18 @@ void main() {
   runApp(const MyApp());
 }
 
+class _AudioSettingsData {
+  final int bufferSize;
+  final int sampleRate;
+  final int bitDepth;
+
+  const _AudioSettingsData({
+    required this.bufferSize,
+    required this.sampleRate,
+    required this.bitDepth,
+  });
+}
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -37,33 +49,358 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen>
+    with SingleTickerProviderStateMixin {
+  static const bool _autoDemoEnabled =
+      bool.fromEnvironment('WAJUCE_AUTODEMO', defaultValue: false);
+  static const bool _autoDemoDisableSyncBeep = bool.fromEnvironment(
+      'WAJUCE_AUTODEMO_DISABLE_SYNC_BEEP',
+      defaultValue: false);
+  static const int _autoDemoStartDelayMs =
+      int.fromEnvironment('WAJUCE_AUTODEMO_START_DELAY_MS', defaultValue: 0);
+
   WAContext? _ctx;
   int _bufferSize = 512;
+  int _preferredSampleRate = 44100;
+  int _preferredBitDepth = 32;
+  double _actualSampleRate = 0.0;
+  int _actualBitDepth = 32;
+  bool _isApplyingAudioSettings = false;
+  late final TabController _tabController;
+  bool _autoDemoStarted = false;
+
+  GlobalKey<_DrumPadScreenState> _drumPadKey = GlobalKey<_DrumPadScreenState>();
+  GlobalKey<_SequencerScreenState> _sequencerKey =
+      GlobalKey<_SequencerScreenState>();
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+    if (_autoDemoEnabled) {
+      debugPrint('WAJUCE_AUTODEMO=$_autoDemoEnabled');
+    }
     _initEngine();
   }
 
-  Future<void> _initEngine() async {
-    _ctx?.close();
-    final ctx = WAContext(bufferSize: _bufferSize);
-    await ctx.resume();
-    setState(() => _ctx = ctx);
+  Future<void> _initEngine({bool showFeedback = false}) async {
+    final previous = _ctx;
+    if (previous != null) {
+      await previous.close();
+    }
+
+    bool sampleRateApplied = false;
+    bool bitDepthApplied = false;
+
+    try {
+      final ctx = WAContext(
+        sampleRate: _preferredSampleRate,
+        bufferSize: _bufferSize,
+      );
+      await ctx.resume();
+      sampleRateApplied =
+          await ctx.setPreferredSampleRate(_preferredSampleRate.toDouble());
+      bitDepthApplied = await ctx.setPreferredBitDepth(_preferredBitDepth);
+
+      if (!mounted) {
+        await ctx.close();
+        return;
+      }
+
+      setState(() {
+        _ctx = ctx;
+        _actualSampleRate = ctx.sampleRate;
+        _actualBitDepth = ctx.bitDepth;
+        // Force tab State recreation after context swap so nodes bind to new ctx.
+        _drumPadKey = GlobalKey<_DrumPadScreenState>();
+        _sequencerKey = GlobalKey<_SequencerScreenState>();
+      });
+
+      if (showFeedback) {
+        final deviceText =
+            'Device I/O ${_actualSampleRate.toStringAsFixed(0)}Hz / ${_actualBitDepth}bit';
+        final renderText =
+            'Render target ${_preferredSampleRate}Hz / ${_preferredBitDepth}bit';
+        if (!sampleRateApplied || !bitDepthApplied) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Applied with limits: $deviceText, $renderText',
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Audio settings applied: $deviceText, $renderText',
+              ),
+            ),
+          );
+        }
+      }
+
+      _maybeStartAutoDemo();
+    } catch (e) {
+      debugPrint('Error initializing engine with settings: $e');
+      if (showFeedback && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to apply audio settings')),
+        );
+      }
+    } finally {
+      if (mounted && _isApplyingAudioSettings) {
+        setState(() => _isApplyingAudioSettings = false);
+      }
+    }
+  }
+
+  Future<void> _openAudioSettingsDialog() async {
+    if (_isApplyingAudioSettings) return;
+
+    final result = await showDialog<_AudioSettingsData>(
+      context: context,
+      builder: (dialogContext) {
+        int selectedBuffer = _bufferSize;
+        int selectedSampleRate = _preferredSampleRate;
+        int selectedBitDepth = _preferredBitDepth;
+        const bufferOptions = [256, 512, 1024, 2048];
+        const sampleRateOptions = [8000, 11025, 22050, 44100, 48000, 96000];
+        const bitDepthOptions = [4, 8, 12, 16, 24, 32];
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Audio Settings'),
+              content: SizedBox(
+                width: 340,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<int>(
+                      initialValue: selectedBuffer,
+                      decoration:
+                          const InputDecoration(labelText: 'Buffer Size'),
+                      items: bufferOptions
+                          .map((v) => DropdownMenuItem(
+                              value: v, child: Text('$v samples')))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setDialogState(() => selectedBuffer = v);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      initialValue: selectedSampleRate,
+                      decoration:
+                          const InputDecoration(labelText: 'Sample Rate'),
+                      items: sampleRateOptions
+                          .map((v) =>
+                              DropdownMenuItem(value: v, child: Text('$v Hz')))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setDialogState(() => selectedSampleRate = v);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      initialValue: selectedBitDepth,
+                      decoration: const InputDecoration(labelText: 'Bit Depth'),
+                      items: bitDepthOptions
+                          .map((v) =>
+                              DropdownMenuItem(value: v, child: Text('$v-bit')))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setDialogState(() => selectedBitDepth = v);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Device I/O: ${_actualSampleRate.toStringAsFixed(0)}Hz / ${_actualBitDepth}bit',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Render target: ${selectedSampleRate}Hz / ${selectedBitDepth}bit',
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.orange),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Some iOS devices keep hardware at 48kHz; low sample-rate target is applied as Lo-Fi rendering.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop(
+                      _AudioSettingsData(
+                        bufferSize: selectedBuffer,
+                        sampleRate: selectedSampleRate,
+                        bitDepth: selectedBitDepth,
+                      ),
+                    );
+                  },
+                  child: const Text('Apply'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result == null) return;
+    if (!mounted) return;
+
+    setState(() {
+      _bufferSize = result.bufferSize;
+      _preferredSampleRate = result.sampleRate;
+      _preferredBitDepth = result.bitDepth;
+      _ctx = null;
+      _autoDemoStarted = false;
+      _isApplyingAudioSettings = true;
+    });
+
+    await _initEngine(showFeedback: true);
+  }
+
+  void _maybeStartAutoDemo() {
+    if (!_autoDemoEnabled || _autoDemoStarted || _ctx == null) return;
+    _autoDemoStarted = true;
+    if (_autoDemoStartDelayMs > 0) {
+      Future.delayed(const Duration(milliseconds: _autoDemoStartDelayMs), () {
+        if (!mounted || _ctx == null) return;
+        unawaited(_runAutoDemo());
+      });
+      return;
+    }
+    unawaited(_runAutoDemo());
+  }
+
+  Future<void> _waitForAutoDemoTargets() async {
+    for (int i = 0; i < 30; i++) {
+      if (!mounted) return;
+      if (_drumPadKey.currentState != null) {
+        return;
+      }
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
+  void _emitSyncMarkerBeep() {
+    final ctx = _ctx;
+    if (ctx == null) return;
+
+    final osc = ctx.createOscillator();
+    final gain = ctx.createGain();
+
+    osc.type = WAOscillatorType.square;
+    osc.frequency.value = 1320.0;
+    gain.gain.value = 0.0;
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    final t = ctx.currentTime + 0.002;
+    gain.gain.setValueAtTime(0.0, t);
+    gain.gain.linearRampToValueAtTime(0.32, t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.10);
+    osc.start(t);
+    osc.stop(t + 0.12);
+
+    Future.delayed(const Duration(milliseconds: 250), () {
+      osc.dispose();
+      gain.dispose();
+    });
+  }
+
+  Future<void> _runAutoDemo() async {
+    await _waitForAutoDemoTargets();
+    if (!mounted) return;
+
+    if (!_autoDemoDisableSyncBeep) {
+      debugPrint('AUTODEMO step: sync-beep');
+      _emitSyncMarkerBeep();
+    }
+    await Future.delayed(const Duration(milliseconds: 1200));
+    if (!mounted) return;
+
+    debugPrint('AUTODEMO step: tab->sampler');
+    _tabController.animateTo(
+      1,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+
+    await Future.delayed(const Duration(milliseconds: 1400));
+    if (!mounted) return;
+    debugPrint('AUTODEMO step: tune');
+    _drumPadKey.currentState?.demoSetTune(1200.0);
+
+    await Future.delayed(const Duration(milliseconds: 1600));
+    if (!mounted) return;
+    debugPrint('AUTODEMO step: decay');
+    _drumPadKey.currentState?.demoSetDecay(1.77);
+
+    await Future.delayed(const Duration(milliseconds: 1800));
+    if (!mounted) return;
+    debugPrint('AUTODEMO step: hit');
+    _drumPadKey.currentState?.demoHit();
+
+    await Future.delayed(const Duration(milliseconds: 2400));
+    if (!mounted) return;
+    debugPrint('AUTODEMO step: tab->sequencer');
+    _tabController.animateTo(
+      2,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+
+    await Future.delayed(const Duration(milliseconds: 2000));
+    if (!mounted) return;
+    debugPrint('AUTODEMO step: start sequencer');
+    await _sequencerKey.currentState?.demoEnsureReadyAndStart();
+    debugPrint('AUTODEMO step: done');
   }
 
   @override
   void dispose() {
     _ctx?.close();
+    _tabController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     if (_ctx == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              if (_isApplyingAudioSettings) ...[
+                const SizedBox(height: 12),
+                const Text('Applying audio settings...'),
+              ],
+            ],
+          ),
+        ),
+      );
     }
 
     // Web-specific: Show unlock button if AudioContext is suspended
@@ -98,50 +435,42 @@ class _MainScreenState extends State<MainScreen> {
       );
     }
 
-    return DefaultTabController(
-      length: 4,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('wajuce Multi-Test'),
-          actions: [
-            PopupMenuButton<int>(
-              icon: const Icon(Icons.settings),
-              initialValue: _bufferSize,
-              onSelected: (val) {
-                if (_bufferSize != val) {
-                  setState(() {
-                    _bufferSize = val;
-                    _ctx = null; // Show loading
-                  });
-                  Future.delayed(
-                      const Duration(milliseconds: 100), _initEngine);
-                }
-              },
-              itemBuilder: (context) => [256, 512, 1024]
-                  .map(
-                      (s) => PopupMenuItem(value: s, child: Text('Buffer: $s')))
-                  .toList(),
-            ),
-          ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(icon: Icon(Icons.piano), text: 'Synth Pad'),
-              Tab(icon: Icon(Icons.music_note), text: 'Sampler'),
-              Tab(icon: Icon(Icons.grid_view), text: 'Sequencer'),
-              Tab(icon: Icon(Icons.mic), text: 'I/O & Rec'),
-            ],
+    final scaffold = Scaffold(
+      appBar: AppBar(
+        title: const Text('wajuce Multi-Test'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _openAudioSettingsDialog,
           ),
-        ),
-        body: TabBarView(
-          children: [
-            SynthPadScreen(ctx: _ctx!),
-            DrumPadScreen(ctx: _ctx!),
-            SequencerScreen(ctx: _ctx!),
-            RecorderScreen(ctx: _ctx!),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Icons.piano), text: 'Synth Pad'),
+            Tab(icon: Icon(Icons.music_note), text: 'Sampler'),
+            Tab(icon: Icon(Icons.grid_view), text: 'Sequencer'),
+            Tab(icon: Icon(Icons.mic), text: 'I/O & Rec'),
           ],
         ),
       ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          SynthPadScreen(
+            key: ValueKey<int>(_ctx!.contextId),
+            ctx: _ctx!,
+          ),
+          DrumPadScreen(key: _drumPadKey, ctx: _ctx!),
+          SequencerScreen(key: _sequencerKey, ctx: _ctx!),
+          RecorderScreen(
+            key: ValueKey<String>('rec-${_ctx!.contextId}'),
+            ctx: _ctx!,
+          ),
+        ],
+      ),
     );
+    return scaffold;
   }
 }
 
@@ -435,6 +764,22 @@ class _DrumPadScreenState extends State<DrumPadScreen> {
     });
   }
 
+  void demoSetTune(double value) {
+    setState(() {
+      _tune = value.clamp(-1200.0, 1200.0).toDouble();
+    });
+  }
+
+  void demoSetDecay(double value) {
+    setState(() {
+      _decay = value.clamp(0.01, 2.0).toDouble();
+    });
+  }
+
+  void demoHit() {
+    _play();
+  }
+
   @override
   void dispose() {
     _midi.dispose();
@@ -606,7 +951,6 @@ class MachineVoicePool {
 
     // 2. Pool empty? Create one immediately.
     // Keep API async-compatible for call sites.
-    debugPrint("Pool empty! Creating batch voice...");
     final v = _createBatch();
 
     _ensureReplenish(); // Schedule replenishment
@@ -680,10 +1024,7 @@ class MachineVoicePool {
       try {
         if (_disposed) return;
 
-        final stopwatch = Stopwatch()..start();
         final v = _createBatch();
-        stopwatch.stop();
-        debugPrint("Batch voice created in ${stopwatch.elapsedMicroseconds}us");
 
         _spares.add(v);
       } catch (e) {
@@ -707,8 +1048,6 @@ class MachineVoicePool {
       _ensureReplenish();
       return v;
     }
-    debugPrint(
-        "WARNGING: Pool empty, creating synchronously (May cause glitches/crash)");
     final v = _createBatch();
     _ensureReplenish();
     return v;
@@ -767,6 +1106,9 @@ class _SequencerScreenState extends State<SequencerScreen> {
 
   WAWorkletNode? _clockNode;
   WAGainNode? _clockSink;
+  static const double _warmupAheadSeconds = 0.03;
+  static const double _noteSafetyAheadSeconds = 0.006;
+  static const double _staleTickDropThresholdSeconds = 0.12;
 
   @override
   void initState() {
@@ -846,7 +1188,7 @@ class _SequencerScreenState extends State<SequencerScreen> {
       });
       _applyMachineRealtimeParams(
         machine,
-        atTime: widget.ctx.currentTime + 0.002,
+        atTime: widget.ctx.currentTime + _warmupAheadSeconds,
         force: true,
       );
     } catch (e) {
@@ -860,7 +1202,7 @@ class _SequencerScreenState extends State<SequencerScreen> {
       _isPlaying = !_isPlaying;
       if (_isPlaying) {
         _currentStep = 0;
-        final warmupTime = widget.ctx.currentTime + 0.004;
+        final warmupTime = widget.ctx.currentTime + _warmupAheadSeconds;
         for (final m in _machines) {
           _applyMachineRealtimeParams(m, atTime: warmupTime, force: true);
         }
@@ -871,9 +1213,36 @@ class _SequencerScreenState extends State<SequencerScreen> {
         _clockNode?.port.postMessage({'type': 'bpm', 'value': _bpm});
       } else {
         _clockNode?.port.postMessage({'type': 'stop'});
+        _hardStopAllMachines();
         _currentStep = -1; // Reset highlight
       }
     });
+  }
+
+  void _hardStopAllMachines() {
+    final stopTime = widget.ctx.currentTime + 0.001;
+    for (final m in _machines) {
+      final v = m._voice;
+      if (v == null) continue;
+      v.gain.gain.cancelAndHoldAtTime(stopTime);
+      v.gain.gain.setValueAtTime(0.0, stopTime);
+    }
+  }
+
+  Future<void> demoEnsureReadyAndStart() async {
+    for (int i = 0; i < 50; i++) {
+      if (!mounted) return;
+      if (_machines.isNotEmpty && _clockNode != null) break;
+      if (_machines.isEmpty && !_isAddingMachine) {
+        _addMachine();
+      }
+      await Future.delayed(const Duration(milliseconds: 120));
+    }
+
+    if (!mounted) return;
+    if (!_isPlaying) {
+      _togglePlay();
+    }
   }
 
   void _applyMachineRealtimeParams(MachineState m,
@@ -958,10 +1327,15 @@ class _SequencerScreenState extends State<SequencerScreen> {
   }
 
   void _onTick(int step, [double? scheduledTime]) {
-    if (!mounted) return;
+    if (!mounted || !_isPlaying) return;
     final now = widget.ctx.currentTime;
-    final triggerTime =
-        scheduledTime == null ? (now + 0.004) : max(scheduledTime, now + 0.004);
+    if (scheduledTime != null &&
+        scheduledTime < now - _staleTickDropThresholdSeconds) {
+      return;
+    }
+    final triggerTime = scheduledTime == null
+        ? (now + _noteSafetyAheadSeconds)
+        : max(scheduledTime, now + _noteSafetyAheadSeconds);
 
     for (var m in _machines) {
       if (m.steps[step]) {
@@ -1029,10 +1403,6 @@ class _SequencerScreenState extends State<SequencerScreen> {
                     setState(() => _bpm = v);
                     if (_isPlaying) {
                       _clockNode?.port.postMessage({'type': 'bpm', 'value': v});
-                      _clockNode?.port.postMessage({
-                        'type': 'syncTime',
-                        'contextTime': widget.ctx.currentTime,
-                      });
                     }
                   },
                 ),
@@ -1381,6 +1751,7 @@ class _RecorderScreenState extends State<RecorderScreen> {
   WAMediaStreamSourceNode? _micSource;
   WAAnalyserNode? _analyser;
   WAGainNode? _monitorGain;
+  WAGainNode? _filePlaybackGain;
 
   WABufferSourceNode? _fileSource;
   WABuffer? _decodedBuffer;
@@ -1410,9 +1781,12 @@ class _RecorderScreenState extends State<RecorderScreen> {
 
     _monitorGain = widget.ctx.createGain();
     _monitorGain!.gain.value = 0; // Default monitor off
+    _filePlaybackGain = widget.ctx.createGain();
+    _filePlaybackGain!.gain.value = 0.9; // Keep decoded file audible by default
 
     _analyser!.connect(_monitorGain!);
     _monitorGain!.connect(widget.ctx.destination);
+    _filePlaybackGain!.connect(widget.ctx.destination);
   }
 
   @override
@@ -1421,6 +1795,7 @@ class _RecorderScreenState extends State<RecorderScreen> {
     _micSource?.dispose();
     _analyser?.dispose();
     _monitorGain?.dispose();
+    _filePlaybackGain?.dispose();
     _fileSource?.dispose();
     super.dispose();
   }
@@ -1455,6 +1830,7 @@ class _RecorderScreenState extends State<RecorderScreen> {
     setState(() => _isLoadingFile = true);
 
     try {
+      await widget.ctx.resume();
       final data = await rootBundle.load('lib/cr01.wav');
       final buffer =
           await widget.ctx.decodeAudioData(data.buffer.asUint8List());
@@ -1465,6 +1841,7 @@ class _RecorderScreenState extends State<RecorderScreen> {
       _fileSource = widget.ctx.createBufferSource();
       _fileSource!.buffer = buffer;
       _fileSource!.connect(_analyser!);
+      _fileSource!.connect(_filePlaybackGain!);
       _fileSource!.start();
 
       _decodedBuffer = buffer;

@@ -22,6 +22,9 @@ int contextCreate(int sampleRate, int bufferSize,
 void contextDestroy(int ctxId) => _unsupported();
 double contextGetTime(int ctxId) => _unsupported();
 double contextGetSampleRate(int ctxId) => _unsupported();
+int contextGetBitDepth(int ctxId) => 32;
+bool contextSetPreferredSampleRate(int ctxId, double sampleRate) => false;
+bool contextSetPreferredBitDepth(int ctxId, int bitDepth) => false;
 int contextGetState(int ctxId) => _unsupported();
 void contextResume(int ctxId) => _unsupported();
 void contextSuspend(int ctxId) => _unsupported();

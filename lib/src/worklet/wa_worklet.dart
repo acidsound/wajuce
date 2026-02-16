@@ -20,14 +20,17 @@ class WAWorklet {
   final Set<String> _registeredFactories = {};
   final Set<String> _loadedModules = {};
   final Set<int> _backendManagedNodes = {};
+  final Set<int> _removedNodes = {};
   bool _isolateStarted = false;
   final Map<int, void Function(dynamic)> _listeners = {};
+  final Map<int, void Function()> _nodeDisposers = {};
 
   /// Creates a new AudioWorklet manager.
   WAWorklet({required this.contextId, this.sampleRate = 44100}) {
     _isolateManager.onProcessorMessage = (nodeId, data) {
       _listeners[nodeId]?.call(data);
     };
+    _isolateManager.onNodeEnded = _handleNodeEnded;
 
     _instances.add(this);
     if (!_backendListenerInstalled) {
@@ -109,6 +112,7 @@ class WAWorklet {
   /// Create a node that runs a registered processor.
   int createNode(int nodeId, String processorName,
       {Map<String, double> paramDefaults = const {}, int? bridgeId}) {
+    _removedNodes.remove(nodeId);
     if (_factories.containsKey(processorName)) {
       _backendManagedNodes.remove(nodeId);
       _isolateManager.createNode(nodeId, processorName,
@@ -127,11 +131,26 @@ class WAWorklet {
 
   /// Remove a processor node.
   void removeNode(int nodeId) {
+    if (!_removedNodes.add(nodeId)) {
+      return;
+    }
     _listeners.remove(nodeId);
+    _nodeDisposers.remove(nodeId);
     if (_backendManagedNodes.remove(nodeId)) {
       return;
     }
     _isolateManager.removeNode(nodeId);
+  }
+
+  /// Internal: register a disposer for auto-cleanup when processor ends.
+  void registerNodeDisposer(int nodeId, void Function() disposeNode) {
+    _removedNodes.remove(nodeId);
+    _nodeDisposers[nodeId] = disposeNode;
+  }
+
+  /// Internal: unregister a node disposer.
+  void unregisterNodeDisposer(int nodeId) {
+    _nodeDisposers.remove(nodeId);
   }
 
   /// Send a message to a processor.
@@ -153,6 +172,8 @@ class WAWorklet {
     _registeredFactories.clear();
     _loadedModules.clear();
     _backendManagedNodes.clear();
+    _removedNodes.clear();
+    _nodeDisposers.clear();
     _isolateStarted = false;
 
     _instances.remove(this);
@@ -175,5 +196,14 @@ class WAWorklet {
         return;
       }
     }
+  }
+
+  void _handleNodeEnded(int nodeId) {
+    final disposer = _nodeDisposers.remove(nodeId);
+    if (disposer != null) {
+      disposer();
+      return;
+    }
+    removeNode(nodeId);
   }
 }

@@ -30,11 +30,15 @@ class WAConstantSourceNode extends WAScheduledSourceNode {
 
   @override
   void start([double when = 0]) {
+    if (isDisposed) return;
+    markStarted();
     backend.constantSourceStart(nodeId, when);
   }
 
   @override
   void stop([double when = 0]) {
+    if (isDisposed || hasEnded) return;
     backend.constantSourceStop(nodeId, when);
+    scheduleStopAutoDispose(when);
   }
 }

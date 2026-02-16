@@ -36,8 +36,9 @@ class CreateNodeMessage extends AudioIsolateMessage {
   final int nodeId;
   final String processorName;
   final Map<String, double> paramDefaults;
-  final int? bridgeId; 
-  CreateNodeMessage(this.nodeId, this.processorName, this.paramDefaults, {this.bridgeId});
+  final int? bridgeId;
+  CreateNodeMessage(this.nodeId, this.processorName, this.paramDefaults,
+      {this.bridgeId});
 }
 
 class RemoveNodeMessage extends AudioIsolateMessage {
@@ -53,7 +54,7 @@ class ProcessorMessage extends AudioIsolateMessage {
 
 class ProcessQuantumMessage extends AudioIsolateMessage {
   final int nodeId;
-  final List<Float32List> inputData; 
+  final List<Float32List> inputData;
   ProcessQuantumMessage(this.nodeId, this.inputData);
 }
 
@@ -67,6 +68,11 @@ class PortMessage extends AudioIsolateMessage {
   final int nodeId;
   final dynamic data;
   PortMessage(this.nodeId, this.data);
+}
+
+class NodeEndedMessage extends AudioIsolateMessage {
+  final int nodeId;
+  NodeEndedMessage(this.nodeId);
 }
 
 class StopIsolateMessage extends AudioIsolateMessage {}

@@ -13,6 +13,7 @@ import '../backend/backend.dart' as backend;
 /// via backend callbacks.
 class AudioIsolateManager {
   void Function(int nodeId, dynamic data)? onProcessorMessage;
+  void Function(int nodeId)? onNodeEnded;
 
   final Map<String, WAWorkletProcessor Function()> _factories = {};
   final Map<int, WAWorkletProcessor> _processorNodes = {};
@@ -86,6 +87,7 @@ class AudioIsolateManager {
       final keepAlive = processor.process(inputs, outputs, {});
       if (!keepAlive) {
         _processorNodes.remove(nodeId)?.dispose();
+        onNodeEnded?.call(nodeId);
       }
     }
   }

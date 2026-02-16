@@ -15,6 +15,7 @@ class WABufferSourceNode extends WAScheduledSourceNode {
   late final WAParam decay;
   WABuffer? _buffer;
   bool _loop = false;
+  bool _hasExplicitStop = false;
 
   double _loopStart = 0;
   double _loopEnd = 0;
@@ -67,6 +68,9 @@ class WABufferSourceNode extends WAScheduledSourceNode {
   set loop(bool v) {
     _loop = v;
     backend.bufferSourceSetLoop(nodeId, v);
+    if (v && !_hasExplicitStop) {
+      cancelAutoDisposeSchedule();
+    }
   }
 
   /// Start time for looping, in seconds.
@@ -86,17 +90,56 @@ class WABufferSourceNode extends WAScheduledSourceNode {
   /// Start playback at [when].
   @override
   void start([double when = 0]) {
+    if (isDisposed) return;
+    _hasExplicitStop = false;
+    markStarted();
     backend.bufferSourceStart(nodeId, when);
+    _scheduleNaturalEnd(when);
   }
 
   /// Start playback at [when], with optional [offset] and [duration].
   void startAt(double when, [double offset = 0, double? duration]) {
+    if (isDisposed) return;
+    _hasExplicitStop = false;
+    markStarted();
     backend.bufferSourceStartAdvanced(nodeId, when, offset, duration);
+    _scheduleNaturalEnd(when, offset: offset, duration: duration);
   }
 
   /// Stop playback at the given time.
   @override
   void stop([double when = 0]) {
+    if (isDisposed || hasEnded) return;
+    _hasExplicitStop = true;
     backend.bufferSourceStop(nodeId, when);
+    scheduleStopAutoDispose(when);
+    if (!_loop) {
+      _scheduleNaturalEnd(when);
+    }
+  }
+
+  void _scheduleNaturalEnd(double when, {double offset = 0, double? duration}) {
+    if (_loop) {
+      return;
+    }
+    final buf = _buffer;
+    if (buf == null || buf.sampleRate <= 0) {
+      return;
+    }
+
+    final bufferDuration = buf.length / buf.sampleRate;
+    final normalizedOffset = offset < 0 ? 0.0 : offset;
+    var remaining = bufferDuration - normalizedOffset;
+    if (duration != null && duration.isFinite) {
+      remaining = remaining < duration ? remaining : duration;
+    }
+    if (remaining < 0) {
+      remaining = 0;
+    }
+
+    final rate = playbackRate.value.abs();
+    final speed = rate > 0 ? rate : 1.0;
+    final naturalEndTime = when + (remaining / speed);
+    scheduleEstimatedNaturalEnd(naturalEndTime);
   }
 }

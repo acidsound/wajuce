@@ -51,13 +51,17 @@ class WAOscillatorNode extends WAScheduledSourceNode {
   /// Start the oscillator at the given time (in seconds).
   @override
   void start([double when = 0]) {
+    if (isDisposed) return;
+    markStarted();
     backend.oscStart(nodeId, when);
   }
 
   /// Stop the oscillator at the given time.
   @override
   void stop([double when = 0]) {
+    if (isDisposed || hasEnded) return;
     backend.oscStop(nodeId, when);
+    scheduleStopAutoDispose(when);
   }
 
   /// Set a custom PeriodicWave waveform.

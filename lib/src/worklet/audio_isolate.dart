@@ -23,6 +23,9 @@ class AudioIsolateManager {
   /// Callback for messages received from processors.
   void Function(int nodeId, dynamic data)? onProcessorMessage;
 
+  /// Callback fired when a processor indicates it has ended.
+  void Function(int nodeId)? onNodeEnded;
+
   /// Starts the audio isolate.
   /// Starts the audio processing isolate.
   Future<void> start({
@@ -49,6 +52,8 @@ class AudioIsolateManager {
         _readyCompleter.complete();
       } else if (message is PortMessage) {
         onProcessorMessage?.call(message.nodeId, message.data);
+      } else if (message is NodeEndedMessage) {
+        onNodeEnded?.call(message.nodeId);
       }
     });
 
@@ -119,6 +124,7 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
 
         if (!keepAlive) {
           deadNodeIds.add(nodeId);
+          config.mainSendPort.send(NodeEndedMessage(nodeId));
         }
       }
     }
@@ -181,6 +187,7 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
         if (!keepAlive) {
           proc.dispose();
           activeNodes.remove(message.nodeId);
+          config.mainSendPort.send(NodeEndedMessage(message.nodeId));
         }
       }
     } else if (message is StopIsolateMessage) {

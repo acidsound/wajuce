@@ -65,6 +65,7 @@ class WAWorkletNode extends WANode {
     _worklet.addMessageListener(nodeId, (data) {
       port.onMessage?.call(data);
     });
+    _worklet.registerNodeDisposer(nodeId, dispose);
   }
 
   /// The name of the registered processor.
@@ -85,6 +86,7 @@ class WAWorkletNode extends WANode {
   void dispose() {
     if (_isDisposed) return;
     _isDisposed = true;
+    _worklet.unregisterNodeDisposer(nodeId);
     _worklet.removeMessageListener(nodeId);
     _worklet.removeNode(nodeId);
     super.dispose();

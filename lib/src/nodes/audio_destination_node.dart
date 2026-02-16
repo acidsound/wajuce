@@ -20,4 +20,7 @@ class WADestinationNode extends WANode {
 
   @override
   int get numberOfOutputs => 0;
+
+  @override
+  bool get canBeCascadeDisposed => false;
 }

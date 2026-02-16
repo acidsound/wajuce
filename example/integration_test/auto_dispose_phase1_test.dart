@@ -131,4 +131,86 @@ void main() {
     expect(disposeCount, 1);
     await worklet.close();
   });
+
+  testWidgets('connectOwned cascades only owned nodes', (tester) async {
+    final ctx = WAContext();
+    await ctx.resume();
+
+    try {
+      final master = ctx.createGain();
+      master.gain.value = 0.0;
+      master.connect(ctx.destination);
+
+      final osc = ctx.createOscillator();
+      final filter = ctx.createBiquadFilter();
+      final voiceGain = ctx.createGain();
+      voiceGain.gain.value = 0.0;
+
+      osc.connectOwned(filter);
+      filter.connectOwned(voiceGain);
+      voiceGain.connect(master);
+
+      final ended = Completer<void>();
+      osc.onEnded = () {
+        if (!ended.isCompleted) {
+          ended.complete();
+        }
+      };
+
+      final startAt = ctx.currentTime + 0.02;
+      osc.start(startAt);
+      osc.stop(startAt + 0.05);
+      await ended.future.timeout(const Duration(seconds: 2));
+
+      expect(osc.isDisposed, isTrue);
+      expect(filter.isDisposed, isTrue);
+      expect(voiceGain.isDisposed, isTrue);
+      expect(master.isDisposed, isFalse);
+      expect(ctx.destination.isDisposed, isFalse);
+
+      final probe = ctx.createGain();
+      probe.gain.value = 0.0;
+      probe.connect(master);
+      expect(master.isDisposed, isFalse);
+      probe.dispose();
+      master.dispose();
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  testWidgets('disconnect removes owned cascade link', (tester) async {
+    final ctx = WAContext();
+    await ctx.resume();
+
+    try {
+      final osc = ctx.createOscillator();
+      final gain = ctx.createGain();
+      gain.gain.value = 0.0;
+      gain.connect(ctx.destination);
+
+      osc.connectOwned(gain);
+      osc.disconnect(gain);
+      osc.connect(ctx.destination);
+
+      final ended = Completer<void>();
+      osc.onEnded = () {
+        if (!ended.isCompleted) {
+          ended.complete();
+        }
+      };
+
+      final startAt = ctx.currentTime + 0.02;
+      osc.start(startAt);
+      osc.stop(startAt + 0.05);
+      await ended.future.timeout(const Duration(seconds: 2));
+
+      expect(osc.isDisposed, isTrue);
+      expect(gain.isDisposed, isFalse);
+
+      gain.dispose();
+    } finally {
+      await ctx.close();
+    }
+  });
 }

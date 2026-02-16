@@ -5,11 +5,15 @@ import '../backend/backend.dart' as backend;
 abstract class WANode {
   final int _nodeId;
   final int _contextId;
+  final Set<WANode> _ownedDownstream = <WANode>{};
+  bool _isDisposed = false;
 
   /// How channels are mapped when connecting nodes.
   WAChannelCountMode channelCountMode;
+
   /// How to interpret channels (speakers vs discrete).
   WAChannelInterpretation channelInterpretation;
+
   /// The number of channels used by this node.
   int channelCount;
 
@@ -19,8 +23,7 @@ abstract class WANode {
     required int contextId,
     this.channelCount = 2,
     this.channelCountMode = WAChannelCountMode.max,
-    this.channelInterpretation =
-        WAChannelInterpretation.speakers,
+    this.channelInterpretation = WAChannelInterpretation.speakers,
   })  : _nodeId = nodeId,
         _contextId = contextId;
 
@@ -29,6 +32,12 @@ abstract class WANode {
 
   /// Internal context ID.
   int get contextId => _contextId;
+
+  /// `true` once this node has been disposed.
+  bool get isDisposed => _isDisposed;
+
+  /// Whether this node can be auto-disposed by owned-cascade.
+  bool get canBeCascadeDisposed => true;
 
   /// Number of inputs this node accepts.
   int get numberOfInputs;
@@ -44,18 +53,50 @@ abstract class WANode {
     return destination;
   }
 
+  /// Connect and mark [destination] as owned by this node.
+  ///
+  /// Owned nodes are recursively auto-disposed when this node is disposed.
+  WANode connectOwned(WANode destination, {int output = 0, int input = 0}) {
+    if (destination.canBeCascadeDisposed) {
+      _ownedDownstream.add(destination);
+    }
+    return connect(destination, output: output, input: input);
+  }
+
   /// Disconnect this node from all destinations, or from a specific
   /// [destination].
   void disconnect([WANode? destination]) {
     if (destination != null) {
+      _ownedDownstream.remove(destination);
       backend.disconnect(_contextId, _nodeId, destination.nodeId);
     } else {
+      _ownedDownstream.clear();
       backend.disconnectAll(_contextId, _nodeId);
     }
   }
 
   /// Free this node's native resources.
   void dispose() {
+    _disposeWithVisited(<WANode>{});
+  }
+
+  void _disposeWithVisited(Set<WANode> visited) {
+    if (!visited.add(this) || _isDisposed) {
+      return;
+    }
+    _isDisposed = true;
+    _disposeOwnedSubgraph(visited);
     backend.removeNode(_contextId, _nodeId);
+  }
+
+  void _disposeOwnedSubgraph(Set<WANode> visited) {
+    final owned = _ownedDownstream.toList(growable: false);
+    _ownedDownstream.clear();
+    for (final node in owned) {
+      if (!node.canBeCascadeDisposed) {
+        continue;
+      }
+      node._disposeWithVisited(visited);
+    }
   }
 }

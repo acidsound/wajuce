@@ -10,7 +10,6 @@ abstract class WAScheduledSourceNode extends WANode {
   void Function()? onEnded;
   Timer? _autoDisposeTimer;
   bool _hasEnded = false;
-  bool _isDisposed = false;
   double _scheduledStopTime = double.infinity;
   int _scheduleToken = 0;
 
@@ -32,26 +31,23 @@ abstract class WAScheduledSourceNode extends WANode {
   /// `true` if ended callback has already fired.
   bool get hasEnded => _hasEnded;
 
-  /// `true` if this node has already been disposed.
-  bool get isDisposed => _isDisposed;
-
   /// Call from subclass `start(...)` implementations.
   void markStarted() {
-    if (_isDisposed) return;
+    if (isDisposed) return;
     _hasEnded = false;
   }
 
   /// Call from subclass `stop(...)` implementations.
   /// Last-write-wins semantics: each call replaces prior end scheduling.
   void scheduleStopAutoDispose(double when) {
-    if (_isDisposed || _hasEnded) return;
+    if (isDisposed || _hasEnded) return;
     _scheduledStopTime = when;
     _scheduleAutoDispose(when);
   }
 
   /// Schedule auto-dispose for natural one-shot completion.
   void scheduleEstimatedNaturalEnd(double when) {
-    if (_isDisposed || _hasEnded) return;
+    if (isDisposed || _hasEnded) return;
     if (_scheduledStopTime.isFinite && _scheduledStopTime <= when) {
       return;
     }
@@ -78,7 +74,7 @@ abstract class WAScheduledSourceNode extends WANode {
   }
 
   void _finalizeEnded(int token) {
-    if (_isDisposed || _hasEnded || token != _scheduleToken) {
+    if (isDisposed || _hasEnded || token != _scheduleToken) {
       return;
     }
     _hasEnded = true;
@@ -88,8 +84,7 @@ abstract class WAScheduledSourceNode extends WANode {
 
   @override
   void dispose() {
-    if (_isDisposed) return;
-    _isDisposed = true;
+    if (isDisposed) return;
     cancelAutoDisposeSchedule();
     super.dispose();
   }

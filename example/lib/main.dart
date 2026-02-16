@@ -24,6 +24,48 @@ class _AudioSettingsData {
   });
 }
 
+enum WASchedulerMode {
+  precise,
+  live,
+}
+
+class WASchedulerTimingPolicy {
+  static double eventLeadSeconds(
+    WAContext ctx, {
+    WASchedulerMode mode = WASchedulerMode.precise,
+  }) {
+    final sr = ctx.sampleRate > 0 ? ctx.sampleRate : 44100.0;
+    final bufferSize =
+        ctx.requestedBufferSize > 0 ? ctx.requestedBufferSize : 512;
+    final blockSeconds = bufferSize / sr;
+
+    switch (mode) {
+      case WASchedulerMode.live:
+        // Keep live interaction near-immediate while leaving one-block headroom.
+        return (blockSeconds * 1.25).clamp(0.003, 0.012);
+      case WASchedulerMode.precise:
+        // Timeline playback gets wider lookahead for stable first-hit ramps.
+        return (blockSeconds * 3.0).clamp(0.02, 0.12);
+    }
+  }
+
+  static double scheduleTime(
+    WAContext ctx, {
+    WASchedulerMode mode = WASchedulerMode.precise,
+  }) {
+    return ctx.currentTime + eventLeadSeconds(ctx, mode: mode);
+  }
+
+  static String modeLabel(WASchedulerMode mode) {
+    switch (mode) {
+      case WASchedulerMode.live:
+        return 'Live (Low Latency)';
+      case WASchedulerMode.precise:
+        return 'Precise (Timeline)';
+    }
+  }
+}
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -478,12 +520,17 @@ class SynthPadScreen extends StatefulWidget {
 }
 
 class _SynthPadScreenState extends State<SynthPadScreen> {
+  static const WASchedulerMode _schedulerMode = WASchedulerMode.live;
+
   WAOscillatorNode? _osc;
   WAGainNode? _gain;
   WAOscillatorType _type = WAOscillatorType.custom;
 
   double _currentFreq = 440.0;
   double _currentGain = 0.0;
+
+  double get _liveScheduleTime =>
+      WASchedulerTimingPolicy.scheduleTime(widget.ctx, mode: _schedulerMode);
 
   @override
   void initState() {
@@ -523,10 +570,9 @@ class _SynthPadScreenState extends State<SynthPadScreen> {
     // Freq 50..5000 (Log scale approximate)
     double freq = 50.0 * pow(100.0, normX);
 
-    final now = widget.ctx.currentTime;
-
-    _osc?.frequency.setTargetAtTime(freq, now, 0.02);
-    _gain?.gain.setTargetAtTime(normY, now, 0.02);
+    final t = _liveScheduleTime;
+    _osc?.frequency.setTargetAtTime(freq, t, 0.02);
+    _gain?.gain.setTargetAtTime(normY, t, 0.02);
 
     setState(() {
       _currentFreq = freq;
@@ -543,7 +589,7 @@ class _SynthPadScreenState extends State<SynthPadScreen> {
   }
 
   void _onPanEnd(DragEndDetails d) {
-    _gain?.gain.setTargetAtTime(0, widget.ctx.currentTime, 0.05);
+    _gain?.gain.setTargetAtTime(0, _liveScheduleTime, 0.05);
     setState(() => _currentGain = 0);
   }
 
@@ -567,7 +613,10 @@ class _SynthPadScreenState extends State<SynthPadScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Row(
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               const Text("Wave: "),
               DropdownButton<WAOscillatorType>(
@@ -586,9 +635,12 @@ class _SynthPadScreenState extends State<SynthPadScreen> {
                   });
                 },
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
+              Text(
+                WASchedulerTimingPolicy.modeLabel(_schedulerMode),
+                style: const TextStyle(fontSize: 12, color: Colors.orange),
+              ),
               Text("Freq: ${_currentFreq.toStringAsFixed(1)} Hz"),
-              const SizedBox(width: 16),
               Text("Gain: ${_currentGain.toStringAsFixed(2)}"),
             ],
           ),
@@ -649,6 +701,8 @@ class DrumPadScreen extends StatefulWidget {
 }
 
 class _DrumPadScreenState extends State<DrumPadScreen> {
+  static const WASchedulerMode _schedulerMode = WASchedulerMode.live;
+
   WABuffer? _sampleBuffer;
   double _tune = 0;
   double _decay = 0.5;
@@ -660,6 +714,21 @@ class _DrumPadScreenState extends State<DrumPadScreen> {
   List<WAMidiInput> _inputs = [];
   WAMidiInput? _selectedInput;
   String _lastMidiMsg = 'No MIDI input selected';
+
+  double get _liveScheduleTime =>
+      WASchedulerTimingPolicy.scheduleTime(widget.ctx, mode: _schedulerMode);
+  double get _sampleDurationSeconds {
+    final buf = _sampleBuffer;
+    if (buf == null || buf.sampleRate <= 0) {
+      return 0.0;
+    }
+    return buf.length / buf.sampleRate;
+  }
+
+  double get _decayMaxSeconds {
+    // Keep a minimum for short one-shots and expand for longer files.
+    return max(2.0, min(12.0, _sampleDurationSeconds + 1.5));
+  }
 
   @override
   void initState() {
@@ -732,19 +801,43 @@ class _DrumPadScreenState extends State<DrumPadScreen> {
     final source = widget.ctx.createBufferSource();
     source.buffer = _sampleBuffer;
     source.detune.value = _tune;
-    source.decay.value = _decay;
+    // Keep BufferSource internal experimental decay neutral in this example.
+    // Decay slider is handled by explicit output gain envelope below.
+    source.decay.value = 10.0;
 
     final panner = widget.ctx.createStereoPanner();
     panner.pan.value = _pan;
 
     final gain = widget.ctx.createGain();
-    gain.gain.value = _gain;
+    gain.gain.value = 0.0;
 
     source.connectOwned(panner);
     panner.connectOwned(gain);
     gain.connect(widget.ctx.destination);
 
-    source.start();
+    final startAt = _liveScheduleTime;
+    final decaySeconds = _decay.clamp(0.01, _decayMaxSeconds);
+    final sampleDuration =
+        _sampleBuffer!.length / _sampleBuffer!.sampleRate;
+    const attackSeconds = 0.003;
+    const terminalFadeSeconds = 0.012;
+
+    // App-level one-shot envelope for consistent sampler decay behavior.
+    gain.gain.cancelAndHoldAtTime(startAt);
+    gain.gain.setValueAtTime(0.0, startAt);
+    gain.gain.linearRampToValueAtTime(_gain, startAt + attackSeconds);
+    if (decaySeconds >= sampleDuration) {
+      // If decay exceeds sample length, keep full body and fade only at tail.
+      final fadeStart = startAt +
+          max(attackSeconds, sampleDuration - terminalFadeSeconds);
+      gain.gain.setValueAtTime(_gain, fadeStart);
+      gain.gain.linearRampToValueAtTime(
+          0.0001, fadeStart + terminalFadeSeconds);
+    } else {
+      gain.gain.linearRampToValueAtTime(0.0001, startAt + decaySeconds);
+    }
+
+    source.start(startAt);
   }
 
   void demoSetTune(double value) {
@@ -755,7 +848,7 @@ class _DrumPadScreenState extends State<DrumPadScreen> {
 
   void demoSetDecay(double value) {
     setState(() {
-      _decay = value.clamp(0.01, 2.0).toDouble();
+      _decay = value.clamp(0.01, _decayMaxSeconds).toDouble();
     });
   }
 
@@ -809,8 +902,17 @@ class _DrumPadScreenState extends State<DrumPadScreen> {
               label: 'Decay',
               value: _decay,
               min: 0.01,
-              max: 2.0,
+              max: _decayMaxSeconds,
+              isSeconds: true,
               onChanged: (v) => setState(() => _decay = v)),
+          if (_sampleDurationSeconds > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Text(
+                'Sample ${_sampleDurationSeconds.toStringAsFixed(2)}s · full body at Decay >= ${_sampleDurationSeconds.toStringAsFixed(2)}s',
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ),
           _SliderRow(
               label: 'Pan',
               value: _pan,
@@ -1083,9 +1185,11 @@ class _SequencerScreenState extends State<SequencerScreen> {
 
   WAWorkletNode? _clockNode;
   WAGainNode? _clockSink;
-  static const double _warmupAheadSeconds = 0.03;
-  static const double _noteSafetyAheadSeconds = 0.006;
   static const double _staleTickDropThresholdSeconds = 0.12;
+
+  double get _noteSafetyAheadSeconds =>
+      WASchedulerTimingPolicy.eventLeadSeconds(widget.ctx);
+  double get _warmupAheadSeconds => max(0.03, _noteSafetyAheadSeconds * 2.0);
 
   @override
   void initState() {
@@ -1180,12 +1284,13 @@ class _SequencerScreenState extends State<SequencerScreen> {
       if (_isPlaying) {
         _currentStep = 0;
         final warmupTime = widget.ctx.currentTime + _warmupAheadSeconds;
+        final timelineStart = WASchedulerTimingPolicy.scheduleTime(widget.ctx);
         for (final m in _machines) {
           _applyMachineRealtimeParams(m, atTime: warmupTime, force: true);
         }
         _clockNode?.port.postMessage({
           'type': 'start',
-          'contextTime': widget.ctx.currentTime,
+          'contextTime': timelineStart,
         });
         _clockNode?.port.postMessage({'type': 'bpm', 'value': _bpm});
       } else {
@@ -1228,7 +1333,7 @@ class _SequencerScreenState extends State<SequencerScreen> {
     if (v == null) return;
 
     final now = widget.ctx.currentTime;
-    final t = atTime ?? (now + 0.002);
+    final t = atTime ?? (now + _noteSafetyAheadSeconds);
 
     if (force || m._lastWaveType != m.waveType) {
       v.osc.type = m.waveType;
@@ -1347,44 +1452,60 @@ class _SequencerScreenState extends State<SequencerScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           color: Colors.black26,
-          child: Row(
+          child: Column(
             children: [
-              IconButton.filled(
-                onPressed: _togglePlay,
-                icon: Icon(_isPlaying ? Icons.stop : Icons.play_arrow),
-                iconSize: 24,
+              Row(
+                children: [
+                  IconButton.filled(
+                    onPressed: _togglePlay,
+                    icon: Icon(_isPlaying ? Icons.stop : Icons.play_arrow),
+                    iconSize: 24,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    WASchedulerTimingPolicy.modeLabel(WASchedulerMode.precise),
+                    style: const TextStyle(fontSize: 12, color: Colors.orange),
+                  ),
+                ],
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _SliderRow(
-                  label: '',
-                  value: _masterGain,
-                  min: 0,
-                  max: 1,
-                  onChanged: (v) {
-                    setState(() {
-                      _masterGain = v;
-                      _masterOutput?.gain.setTargetAtTime(v, 0, 0.02);
-                    });
-                  },
-                ),
+              _SliderRow(
+                label: 'Mix',
+                value: _masterGain,
+                min: 0,
+                max: 1,
+                onChanged: (v) {
+                  setState(() {
+                    _masterGain = v;
+                    _masterOutput?.gain.setTargetAtTime(v, 0, 0.02);
+                  });
+                },
               ),
-              const SizedBox(width: 16),
-              const Text('BPM'),
-              Expanded(
-                child: Slider(
-                  value: _bpm,
-                  min: 60,
-                  max: 200,
-                  onChanged: (v) {
-                    setState(() => _bpm = v);
-                    if (_isPlaying) {
-                      _clockNode?.port.postMessage({'type': 'bpm', 'value': v});
-                    }
-                  },
-                ),
+              Row(
+                children: [
+                  const SizedBox(width: 40, child: Text('BPM')),
+                  Expanded(
+                    child: Slider(
+                      value: _bpm,
+                      min: 60,
+                      max: 200,
+                      onChanged: (v) {
+                        setState(() => _bpm = v);
+                        if (_isPlaying) {
+                          _clockNode?.port
+                              .postMessage({'type': 'bpm', 'value': v});
+                        }
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: 45,
+                    child: Text(
+                      _bpm.toInt().toString(),
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
+                ],
               ),
-              Text(_bpm.toInt().toString()),
             ],
           ),
         ),
@@ -1725,6 +1846,8 @@ class RecorderScreen extends StatefulWidget {
 }
 
 class _RecorderScreenState extends State<RecorderScreen> {
+  static const WASchedulerMode _schedulerMode = WASchedulerMode.live;
+
   WAMediaStreamSourceNode? _micSource;
   WAAnalyserNode? _analyser;
   WAGainNode? _monitorGain;
@@ -1740,10 +1863,14 @@ class _RecorderScreenState extends State<RecorderScreen> {
   final Uint8List _fftData = Uint8List(256);
   Timer? _visualizerTimer;
 
+  double get _liveScheduleTime =>
+      WASchedulerTimingPolicy.scheduleTime(widget.ctx, mode: _schedulerMode);
+
   @override
   void initState() {
     super.initState();
     _initNodes();
+    // UI repaint timer only. Do not drive audio timing with Timer.periodic.
     _visualizerTimer = Timer.periodic(const Duration(milliseconds: 33), (t) {
       if (_analyser != null) {
         _analyser!.getByteTimeDomainData(_fftData);
@@ -1797,8 +1924,8 @@ class _RecorderScreenState extends State<RecorderScreen> {
   void _toggleMonitor() {
     setState(() {
       _isMonitoring = !_isMonitoring;
-      _monitorGain?.gain.setTargetAtTime(
-          _isMonitoring ? 0.8 : 0, widget.ctx.currentTime, 0.05);
+      _monitorGain?.gain
+          .setTargetAtTime(_isMonitoring ? 0.8 : 0, _liveScheduleTime, 0.03);
     });
   }
 
@@ -1819,7 +1946,7 @@ class _RecorderScreenState extends State<RecorderScreen> {
       _fileSource!.buffer = buffer;
       _fileSource!.connect(_analyser!);
       _fileSource!.connect(_filePlaybackGain!);
-      _fileSource!.start();
+      _fileSource!.start(_liveScheduleTime);
 
       _decodedBuffer = buffer;
     } catch (e) {
@@ -1837,6 +1964,17 @@ class _RecorderScreenState extends State<RecorderScreen> {
         children: [
           const Text("Phase 4 Verification: I/O & Buffers",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text(
+            'Scheduler: ${WASchedulerTimingPolicy.modeLabel(_schedulerMode)}',
+            style: const TextStyle(fontSize: 12, color: Colors.orange),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Guide: default timeline uses Precise mode; realtime monitor/effect path uses Live mode.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          ),
           const SizedBox(height: 16),
 
           // Oscilloscope Visualizer

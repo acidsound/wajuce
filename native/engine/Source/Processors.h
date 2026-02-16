@@ -78,6 +78,8 @@ public:
     // If type is custom but no wave, output silence or fallback? Web Audio says
     // silence.
 
+    constexpr double edgeFadeSeconds = 0.0015; // 1.5 ms
+
     for (int i = 0; i < buf.getNumSamples(); ++i) {
       double currentTime = baseTime + (double)i / sampleRate;
 
@@ -97,10 +99,24 @@ public:
         sample = phase < 0.5 ? 1.0f : -1.0f;
         break;
       case 2: // sawtooth
-        sample = 2.0f * (float)phase - 1.0f;
+        // Web Audio basic waveform phase:
+        // x(t)=t/pi over [-pi, pi) -> with normalized phase [0,1):
+        // [0,0.5): 2*phase, [0.5,1): 2*phase-2
+        sample = phase < 0.5 ? 2.0f * (float)phase
+                             : 2.0f * (float)phase - 2.0f;
         break;
       case 3: // triangle
-        sample = (float)(4.0 * std::abs(phase - 0.5) - 1.0);
+        // Web Audio basic waveform phase:
+        // x(t)=2*t/pi in [0,pi/2)
+        // x(t)=2-2*t/pi in [pi/2,3pi/2)
+        // x(t)=2*t/pi-4 in [3pi/2,2pi)
+        if (phase < 0.25) {
+          sample = 4.0f * (float)phase;
+        } else if (phase < 0.75) {
+          sample = 2.0f - 4.0f * (float)phase;
+        } else {
+          sample = 4.0f * (float)phase - 4.0f;
+        }
         break;
       case 4: // custom
         if (useWavetable && tableSize > 0) {
@@ -112,6 +128,18 @@ public:
         }
         break;
       }
+      // Dezipper oscillator edges to avoid hard on/off discontinuities.
+      double edgeGain = 1.0;
+      if (currentTime >= startT) {
+        const double fadeIn = (currentTime - startT) / edgeFadeSeconds;
+        edgeGain = juce::jmin(edgeGain, juce::jlimit(0.0, 1.0, fadeIn));
+      }
+      if (stopT < 1.0e14) {
+        const double fadeOut = (stopT - currentTime) / edgeFadeSeconds;
+        edgeGain = juce::jmin(edgeGain, juce::jlimit(0.0, 1.0, fadeOut));
+      }
+      sample *= (float)edgeGain;
+
       for (int ch = 0; ch < buf.getNumChannels(); ++ch)
         buf.getWritePointer(ch)[i] = sample;
 
@@ -166,27 +194,42 @@ public:
   }
 
   const juce::String getName() const override { return "WAGain"; }
-  void prepareToPlay(double, int) override {}
+  void prepareToPlay(double sr, int) override {
+    sampleRate = sr > 0.0 ? sr : 44100.0;
+    smoothedGain = gain.load(std::memory_order_relaxed);
+  }
   void releaseResources() override {}
 
   void processBlock(juce::AudioBuffer<float> &buf,
                     juce::MidiBuffer &) override {
     const int numSamples = buf.getNumSamples();
     const int numChannels = buf.getNumChannels();
+    constexpr float dezipperTauSeconds = 0.0008f; // 0.8 ms
+    const float alpha =
+        std::exp(-1.0f / (dezipperTauSeconds * (float)sampleRate));
+    auto smoothGain = [&](float target) {
+      smoothedGain = target + alpha * (smoothedGain - target);
+      return smoothedGain;
+    };
 
     if (isAutomated.load(std::memory_order_relaxed)) {
       if (sampleAccurateGains.size() < (size_t)numSamples) {
         sampleAccurateGains.resize(numSamples, gain.load());
       }
       for (int i = 0; i < numSamples; ++i) {
-        const float g = sampleAccurateGains[i];
+        const float g = smoothGain(sampleAccurateGains[i]);
         for (int ch = 0; ch < numChannels; ++ch) {
           buf.getWritePointer(ch)[i] *= g;
         }
       }
     } else {
-      const float g = gain.load(std::memory_order_relaxed);
-      buf.applyGain(g);
+      const float target = gain.load(std::memory_order_relaxed);
+      for (int i = 0; i < numSamples; ++i) {
+        const float g = smoothGain(target);
+        for (int ch = 0; ch < numChannels; ++ch) {
+          buf.getWritePointer(ch)[i] *= g;
+        }
+      }
     }
   }
 
@@ -206,6 +249,8 @@ public:
   std::atomic<float> gain{1.0f};
   std::vector<float> sampleAccurateGains;
   std::atomic<bool> isAutomated{false};
+  double sampleRate = 44100.0;
+  float smoothedGain = 1.0f;
 };
 
 // ============================================================================

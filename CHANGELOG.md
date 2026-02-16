@@ -6,6 +6,7 @@
 * **Diagnostics API**: Added `WAContext.graphStats` with `liveNodeCount`, `feedbackBridgeCount`, and `machineVoiceGroupCount`.
 * **Example Migration**: Updated one-shot and voice-local chains in `example/lib/main.dart` to use `connectOwned(...)`.
 * **Regression Tests**: Expanded integration coverage for machine-voice lifecycle reclamation and repeated one-shot leak checks.
+* **Scheduler Documentation/Example**: Documented `Precise (Timeline)` vs `Live (Low Latency)` policy with `Precise` default guidance, added `Timer.periodic` timing caveat, and updated example tabs to demonstrate the split (Synth Pad/I/O=`Live`, Sequencer=`Precise`).
 
 ## 0.2.2
 

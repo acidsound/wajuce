@@ -18,7 +18,36 @@
 - **Feedback Loops**: Built-in `FeedbackBridge` automatically handles cyclic connections in the node graph (1-block delay).
 - **Auto-Dispose Lifecycle**: Source nodes auto-dispose on `stop()`/natural end, and `connectOwned(...)` enables explicit owned-subgraph cascade cleanup.
 - **Graph Diagnostics**: `WAContext.graphStats` exposes backend live-node/feedback-bridge/machine-voice-group counters for leak checks.
+- **Scheduler Policy (Example)**: Example app documents and demonstrates `Precise (Timeline)` vs `Live (Low Latency)` scheduling modes without changing Web Audio API semantics.
 - **Lo-Fi Render Targets (Example)**: Example app settings support low sample-rate/bit-depth render targets (`8k/11.025k/22.05k`, `4/8/12-bit`) with clear `Device I/O` vs `Render target` separation.
+
+---
+
+## ⏱️ Scheduler Modes Guide
+
+`wajuce` keeps Web Audio API behavior intact, but application-level schedulers can use different timing policies depending on workload.
+
+| Mode | Recommended Use | Timing Goal |
+| :--- | :--- | :--- |
+| **Precise (Timeline)** | step sequencers, transport playback, offline-like deterministic playback | stable first-hit/automation timing with larger lookahead |
+| **Live (Low Latency)** | realtime MIDI performance, live monitor/effect chains | minimum interaction latency with small lookahead |
+
+Recommended default:
+- Use `Precise` unless the path is explicitly realtime.
+- Use `Live` only for monitor/play-through/performance paths.
+- In app code, default scheduler helpers to `Precise` and override only realtime paths.
+
+Example app policy:
+- **Synth Pad tab** runs in `Live (Low Latency)` mode.
+- **Sequencer tab** runs in `Precise (Timeline)` mode.
+- **I/O & Rec tab** runs in `Live (Low Latency)` mode.
+
+This is a scheduler-layer policy choice, not a change to `AudioContext`/`AudioParam` semantics.
+
+`Timer.periodic` guidance:
+- Do **not** use `Timer.periodic` as the source of truth for note-on/off or parameter automation timing.
+- Use audio-thread/worklet clock timestamps (`contextTime`, render-quantum ticks) for event scheduling.
+- Keep `Timer.periodic` for UI refresh/visualization only (meters, waveform paint, status polling).
 
 ---
 

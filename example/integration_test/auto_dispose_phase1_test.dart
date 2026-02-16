@@ -4,6 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:wajuce/wajuce.dart';
 
+const int _stressLoops =
+    int.fromEnvironment('WAJUCE_STRESS_LOOPS', defaultValue: 120);
+const int _machineVoiceStressLoops =
+    int.fromEnvironment('WAJUCE_MACHINE_VOICE_STRESS_LOOPS', defaultValue: 180);
+
 Future<void> _waitUntil(
   bool Function() predicate, {
   Duration timeout = const Duration(seconds: 3),
@@ -209,6 +214,133 @@ void main() {
       expect(gain.isDisposed, isFalse);
 
       gain.dispose();
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  testWidgets('machine voice lifecycle group is reclaimed as one unit',
+      (tester) async {
+    final ctx = WAContext();
+    await ctx.resume();
+
+    try {
+      final before = ctx.graphStats;
+      late final List<WANode> nodes;
+      try {
+        nodes = ctx.createMachineVoice();
+      } catch (_) {
+        // Web backend doesn't implement native batch voice creation.
+        return;
+      }
+
+      final afterCreate = ctx.graphStats;
+      expect(
+          afterCreate.liveNodeCount,
+          greaterThanOrEqualTo(
+            before.liveNodeCount + 7,
+          ));
+      expect(
+          afterCreate.machineVoiceGroupCount,
+          greaterThanOrEqualTo(
+            before.machineVoiceGroupCount + 1,
+          ));
+      expect(
+          afterCreate.feedbackBridgeCount,
+          greaterThanOrEqualTo(
+            before.feedbackBridgeCount,
+          ));
+
+      // Dispose a non-root member: native lifecycle group should reclaim all.
+      nodes[2].dispose();
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      final afterDispose = ctx.graphStats;
+      expect(afterDispose.liveNodeCount, equals(before.liveNodeCount));
+      expect(
+          afterDispose.feedbackBridgeCount, equals(before.feedbackBridgeCount));
+      expect(afterDispose.machineVoiceGroupCount,
+          equals(before.machineVoiceGroupCount));
+
+      // Idempotent cleanup on stale references.
+      for (final node in nodes) {
+        node.dispose();
+      }
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  testWidgets('stress: owned one-shot chains do not leak live nodes',
+      (tester) async {
+    final ctx = WAContext();
+    await ctx.resume();
+
+    try {
+      final baseline = ctx.graphStats.liveNodeCount;
+
+      for (int i = 0; i < _stressLoops; i++) {
+        final osc = ctx.createOscillator();
+        final gain = ctx.createGain();
+        gain.gain.value = 0.0;
+        osc.connectOwned(gain);
+        gain.connect(ctx.destination);
+
+        final startAt = ctx.currentTime + 0.002;
+        osc.start(startAt);
+        osc.stop(startAt + 0.01);
+
+        if ((i + 1) % 12 == 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+        }
+      }
+
+      await _waitUntil(
+        () => ctx.graphStats.liveNodeCount == baseline,
+        timeout: const Duration(seconds: 12),
+      );
+      expect(ctx.graphStats.liveNodeCount, equals(baseline));
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  testWidgets('stress: machine voice groups reclaim cleanly', (tester) async {
+    final ctx = WAContext();
+    await ctx.resume();
+
+    try {
+      final baseline = ctx.graphStats;
+
+      for (int i = 0; i < _machineVoiceStressLoops; i++) {
+        late final List<WANode> nodes;
+        try {
+          nodes = ctx.createMachineVoice();
+        } catch (_) {
+          return;
+        }
+        nodes[i % nodes.length].dispose();
+
+        if ((i + 1) % 24 == 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      }
+
+      await _waitUntil(
+        () {
+          final stats = ctx.graphStats;
+          return stats.liveNodeCount == baseline.liveNodeCount &&
+              stats.feedbackBridgeCount == baseline.feedbackBridgeCount &&
+              stats.machineVoiceGroupCount == baseline.machineVoiceGroupCount;
+        },
+        timeout: const Duration(seconds: 12),
+      );
+
+      final after = ctx.graphStats;
+      expect(after.liveNodeCount, equals(baseline.liveNodeCount));
+      expect(after.feedbackBridgeCount, equals(baseline.feedbackBridgeCount));
+      expect(after.machineVoiceGroupCount,
+          equals(baseline.machineVoiceGroupCount));
     } finally {
       await ctx.close();
     }

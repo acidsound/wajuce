@@ -26,6 +26,25 @@ class WAAudioSinkInfo {
   const WAAudioSinkInfo({this.type = 'none'});
 }
 
+/// Native graph diagnostics snapshot.
+class WAAudioGraphStats {
+  /// Number of active backend-managed nodes for this context.
+  final int liveNodeCount;
+
+  /// Number of active feedback bridges in the native graph.
+  final int feedbackBridgeCount;
+
+  /// Number of active machine-voice lifecycle groups.
+  final int machineVoiceGroupCount;
+
+  /// Creates graph diagnostics payload.
+  const WAAudioGraphStats({
+    required this.liveNodeCount,
+    required this.feedbackBridgeCount,
+    required this.machineVoiceGroupCount,
+  });
+}
+
 /// Options for render capacity updates.
 class WAAudioRenderCapacityOptions {
   /// Polling interval in seconds.

@@ -1,3 +1,12 @@
+## 0.2.3
+
+* **Auto-Dispose (Phase 1)**: Added scheduled-source auto-dispose with last-write-wins `stop()` semantics and idempotent worklet ended-node cleanup path.
+* **Owned Cascade (Phase 2)**: Added `connectOwned(...)` for explicit owned-subgraph disposal cascade without touching shared buses.
+* **Native Machine Voice Lifecycle (Phase 3)**: Added backend machine-voice group tracking so disposing any member reclaims the full native prewired graph.
+* **Diagnostics API**: Added `WAContext.graphStats` with `liveNodeCount`, `feedbackBridgeCount`, and `machineVoiceGroupCount`.
+* **Example Migration**: Updated one-shot and voice-local chains in `example/lib/main.dart` to use `connectOwned(...)`.
+* **Regression Tests**: Expanded integration coverage for machine-voice lifecycle reclamation and repeated one-shot leak checks.
+
 ## 0.2.2
 
 * **Audio Settings UX**: Added explicit split between `Device I/O` (actual hardware format) and `Render target` (requested render format) to prevent sample-rate/bit-depth confusion on iOS.

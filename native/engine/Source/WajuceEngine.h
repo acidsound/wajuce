@@ -44,6 +44,9 @@ public:
   double getCurrentTime() const { return currentTime.load(); }
   double getSampleRate() const { return sampleRate; }
   int getCurrentBitDepth() const;
+  int32_t getLiveNodeCount();
+  int32_t getFeedbackBridgeCount();
+  int32_t getMachineVoiceGroupCount();
   bool setPreferredSampleRate(double preferredSampleRate);
   bool setPreferredBitDepth(int preferredBitDepth);
   int32_t getDestinationId() const { return 0; } // destination is always ID 0
@@ -144,6 +147,10 @@ private:
     std::shared_ptr<juce::AudioBuffer<float>> buffer;
   };
   std::vector<FeedbackConnection> feedbackConnections;
+  std::unordered_map<int32_t, std::vector<int32_t>> machineVoiceGroups;
+  std::unordered_map<int32_t, int32_t> machineVoiceRootByNode;
+  void removeNodeInternal(int32_t nodeId,
+                          juce::AudioProcessorGraph::UpdateKind updateKind);
 
   double sampleRate;
   int bufferSize;

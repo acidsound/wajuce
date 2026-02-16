@@ -101,6 +101,20 @@ final Map<int, int> _contextDestinationIds = {};
 final Map<int, int> _contextListenerIds = {};
 final Map<int, JSObject> _mediaStreamSourceStreams = {};
 final Map<int, JSObject> _mediaStreamDestinationStreams = {};
+final Map<int, int> _nodeContextIds = {};
+
+void _registerNode(int ctxId, int nodeId, JSObject node) {
+  _nodes[nodeId] = node;
+  _nodeContextIds[nodeId] = ctxId;
+}
+
+void _unregisterNode(int nodeId) {
+  _nodes.remove(nodeId);
+  _nodeContextIds.remove(nodeId);
+  _workletPorts.remove(nodeId);
+  _mediaStreamSourceStreams.remove(nodeId);
+  _mediaStreamDestinationStreams.remove(nodeId);
+}
 
 /// Resolve the AudioParam for a given node by paramName
 JSAudioParam? _getParam(int nodeId, String paramName) {
@@ -181,6 +195,16 @@ int contextCreate(int sampleRate, int bufferSize,
 }
 
 void contextDestroy(int ctxId) {
+  final idsToRemove = <int>[];
+  for (final entry in _nodeContextIds.entries) {
+    if (entry.value == ctxId) {
+      idsToRemove.add(entry.key);
+    }
+  }
+  for (final nodeId in idsToRemove) {
+    _unregisterNode(nodeId);
+  }
+
   final destinationId = _contextDestinationIds.remove(ctxId);
   if (destinationId != null) {
     _nodes.remove(destinationId);
@@ -196,6 +220,20 @@ double contextGetTime(int ctxId) {
   final ctx = _contexts[ctxId];
   return ctx?.currentTime.toDartDouble ?? 0.0;
 }
+
+int contextGetLiveNodeCount(int ctxId) {
+  var count = 0;
+  for (final ownerId in _nodeContextIds.values) {
+    if (ownerId == ctxId) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+int contextGetFeedbackBridgeCount(int ctxId) => 0;
+
+int contextGetMachineVoiceGroupCount(int ctxId) => 0;
 
 double contextGetSampleRate(int ctxId) {
   final ctx = _contexts[ctxId];
@@ -313,84 +351,84 @@ int destinationGetMaxChannelCount(int ctxId) {
 int createGain(int ctxId) {
   final node = _contexts[ctxId]!.createGain();
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
 int createOscillator(int ctxId) {
   final node = _contexts[ctxId]!.createOscillator();
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
 int createBiquadFilter(int ctxId) {
   final node = _contexts[ctxId]!.createBiquadFilter();
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
 int createCompressor(int ctxId) {
   final node = _contexts[ctxId]!.createDynamicsCompressor();
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
 int createDelay(int ctxId, double maxDelay) {
   final node = _contexts[ctxId]!.createDelay(maxDelay.toJS);
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
 int createBufferSource(int ctxId) {
   final node = _contexts[ctxId]!.createBufferSource();
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
 int createAnalyser(int ctxId) {
   final node = _contexts[ctxId]!.createAnalyser();
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
 int createStereoPanner(int ctxId) {
   final node = _contexts[ctxId]!.createStereoPanner();
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
 int createPanner(int ctxId) {
   final node = _contexts[ctxId]!.createPanner();
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
 int createWaveShaper(int ctxId) {
   final node = _contexts[ctxId]!.createWaveShaper();
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
 int createConstantSource(int ctxId) {
   final node = _contexts[ctxId]!.createConstantSource();
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
 int createConvolver(int ctxId) {
   final node = _contexts[ctxId]!.createConvolver();
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
@@ -398,21 +436,21 @@ int createIIRFilter(int ctxId, Float64List feedforward, Float64List feedback) {
   final node = _contexts[ctxId]!.createIIRFilter(
       _float64ListToJSArray(feedforward), _float64ListToJSArray(feedback));
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
 int createChannelSplitter(int ctxId, int outputs) {
   final node = _contexts[ctxId]!.createChannelSplitter(outputs.toJS);
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
 int createChannelMerger(int ctxId, int inputs) {
   final node = _contexts[ctxId]!.createChannelMerger(inputs.toJS);
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
@@ -424,7 +462,7 @@ int createMediaStreamSource(int ctxId, [dynamic stream]) {
   final jsStream = stream as JSObject;
   final node = _contexts[ctxId]!.createMediaStreamSource(jsStream);
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   _mediaStreamSourceStreams[id] = jsStream;
   return id;
 }
@@ -433,7 +471,7 @@ int createMediaStreamDestination(int ctxId) {
   final ctx = _contexts[ctxId]!;
   final node = ctx.callMethod('createMediaStreamDestination'.toJS) as JSObject;
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   try {
     final stream = node.getProperty('stream'.toJS) as JSObject;
     _mediaStreamDestinationStreams[id] = stream;
@@ -448,7 +486,7 @@ int createMediaElementSource(int ctxId, [dynamic mediaElement]) {
   final node =
       _contexts[ctxId]!.createMediaElementSource(mediaElement as JSObject);
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
@@ -459,7 +497,7 @@ int createMediaStreamTrackSource(int ctxId, [dynamic mediaStreamTrack]) {
   final node = _contexts[ctxId]!
       .createMediaStreamTrackSource(mediaStreamTrack as JSObject);
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
@@ -468,7 +506,7 @@ int createScriptProcessor(
   final node = _contexts[ctxId]!.createScriptProcessor(
       bufferSize.toJS, inChannels.toJS, outChannels.toJS);
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   return id;
 }
 
@@ -570,7 +608,7 @@ int createWorkletNode(
   final node = JSAudioWorkletNode(ctx, processorNameToCreate.toJS);
 
   final id = _nextId++;
-  _nodes[id] = node;
+  _registerNode(ctxId, id, node);
   _workletPorts[id] = node.port;
 
   node.port.setProperty(
@@ -739,10 +777,7 @@ void disconnectAll(int ctxId, int srcId) {
 
 void removeNode(int ctxId, int nodeId) {
   disconnectAll(ctxId, nodeId);
-  _nodes.remove(nodeId);
-  _workletPorts.remove(nodeId);
-  _mediaStreamSourceStreams.remove(nodeId);
-  _mediaStreamDestinationStreams.remove(nodeId);
+  _unregisterNode(nodeId);
 }
 
 // ---------------------------------------------------------------------------

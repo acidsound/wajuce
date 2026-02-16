@@ -121,7 +121,10 @@ public:
     }
   }
 
-  void start(double when) { startTime = when; }
+  void start(double when) {
+    phase = 0.0; // Reset phase to zero crossing — prevents click artifacts
+    startTime = when;
+  }
   void stop(double when) { stopTime = when; }
 
   double getTailLengthSeconds() const override { return 0; }
@@ -221,9 +224,8 @@ public:
 
   void prepareToPlay(double sr, int) override {
     sampleRate = sr;
-    smoothedFrequency = juce::jlimit(
-        10.0f, (float)(sampleRate * 0.45),
-        frequency.load(std::memory_order_relaxed));
+    smoothedFrequency = juce::jlimit(10.0f, (float)(sampleRate * 0.45),
+                                     frequency.load(std::memory_order_relaxed));
     smoothedQ = juce::jmax(0.0001f, Q.load(std::memory_order_relaxed));
     updateCoefficients(smoothedFrequency, smoothedQ);
     for (auto &f : filters)
@@ -233,10 +235,11 @@ public:
 
   void processBlock(juce::AudioBuffer<float> &buf,
                     juce::MidiBuffer &) override {
-    const float targetFreq = juce::jlimit(
-        10.0f, (float)(sampleRate * 0.45),
-        frequency.load(std::memory_order_relaxed));
-    const float targetQ = juce::jmax(0.0001f, Q.load(std::memory_order_relaxed));
+    const float targetFreq =
+        juce::jlimit(10.0f, (float)(sampleRate * 0.45),
+                     frequency.load(std::memory_order_relaxed));
+    const float targetQ =
+        juce::jmax(0.0001f, Q.load(std::memory_order_relaxed));
 
     // Smooth coefficient updates across blocks to reduce zipper/tick artifacts.
     constexpr float smoothing = 0.2f;
@@ -309,19 +312,18 @@ public:
   void processBlock(juce::AudioBuffer<float> &buf,
                     juce::MidiBuffer &) override {
     if (buf.getNumChannels() >= 2 && buf.getNumSamples() > 0) {
-      const float targetPan = juce::jlimit(
-          -1.0f, 1.0f, pan.load(std::memory_order_relaxed));
-      const float panStep =
-          (targetPan - lastPan) / (float)buf.getNumSamples();
+      const float targetPan =
+          juce::jlimit(-1.0f, 1.0f, pan.load(std::memory_order_relaxed));
+      const float panStep = (targetPan - lastPan) / (float)buf.getNumSamples();
       float currentPan = lastPan;
 
       float *left = buf.getWritePointer(0);
       float *right = buf.getWritePointer(1);
       for (int i = 0; i < buf.getNumSamples(); ++i) {
-        const float leftGain = std::cos(
-            (currentPan + 1.0f) * juce::MathConstants<float>::pi / 4.0f);
-        const float rightGain = std::sin(
-            (currentPan + 1.0f) * juce::MathConstants<float>::pi / 4.0f);
+        const float leftGain = std::cos((currentPan + 1.0f) *
+                                        juce::MathConstants<float>::pi / 4.0f);
+        const float rightGain = std::sin((currentPan + 1.0f) *
+                                         juce::MathConstants<float>::pi / 4.0f);
         left[i] *= leftGain;
         right[i] *= rightGain;
         currentPan += panStep;
@@ -672,11 +674,12 @@ public:
         float out = delayData[i1] + frac * (delayData[i2] - delayData[i1]);
 
         // 3. Write to delay buffer with feedback.
-        // DelayNode in Web Audio is usually used with an external feedback loop,
-        // but wajuce also exposes an experimental internal feedback param.
+        // DelayNode in Web Audio is usually used with an external feedback
+        // loop, but wajuce also exposes an experimental internal feedback
+        // param.
         float inSample = bufData[i];
-        float fb =
-            juce::jlimit(0.0f, 0.9995f, feedback.load(std::memory_order_relaxed));
+        float fb = juce::jlimit(0.0f, 0.9995f,
+                                feedback.load(std::memory_order_relaxed));
         delayData[wPos] = inSample + out * fb;
 
         // 4. Output mix

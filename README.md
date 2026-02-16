@@ -16,6 +16,8 @@
 - **Zero-Overhead FFI**: Uses Dart FFI for fast communication between Dart and C++ without MethodChannel overhead.
 - **AudioWorklet Support**: Native uses high-priority Dart Isolates; Web uses browser AudioWorklet via `dart:js_interop`.
 - **Feedback Loops**: Built-in `FeedbackBridge` automatically handles cyclic connections in the node graph (1-block delay).
+- **Auto-Dispose Lifecycle**: Source nodes auto-dispose on `stop()`/natural end, and `connectOwned(...)` enables explicit owned-subgraph cascade cleanup.
+- **Graph Diagnostics**: `WAContext.graphStats` exposes backend live-node/feedback-bridge/machine-voice-group counters for leak checks.
 - **Lo-Fi Render Targets (Example)**: Example app settings support low sample-rate/bit-depth render targets (`8k/11.025k/22.05k`, `4/8/12-bit`) with clear `Device I/O` vs `Render target` separation.
 
 ---
@@ -126,7 +128,7 @@ graph TD
 | Feature Group | Status | Component Coverage |
 | :--- | :---: | :--- |
 | **Context & Graph** | ✅ Done | `WAContext`, `WAOfflineContext`, `connect/disconnect` |
-| **Context Extras** | ✅ Done | `listener`, `baseLatency`, `outputLatency`, `sinkId`, `getOutputTimestamp()`, `renderCapacity` (minimal wrapper) |
+| **Context Extras** | ✅ Done | `listener`, `baseLatency`, `outputLatency`, `sinkId`, `getOutputTimestamp()`, `renderCapacity` (minimal wrapper), `graphStats` |
 | **Multi-Channel** | ✅ Done | Support up to 32 channels, `ChannelSplitter`, `ChannelMerger` |
 | **Core Nodes** | ✅ Done | `Oscillator`, `Gain`, `BiquadFilter`, `Compressor`, `Delay`, `Analyser`, `StereoPanner`, `WaveShaper`, `BufferSource` |
 | **Extended Nodes (0.1.5)** | ✅ API Surface | `ConstantSource`, `Convolver`, `IIRFilter`, `Panner`, `MediaElementAudioSource`, `MediaStreamTrackAudioSource` (backend-specific shim/fallback where needed) |

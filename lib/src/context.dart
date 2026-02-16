@@ -143,6 +143,16 @@ class WAContext {
   /// Render-capacity API surface.
   WAAudioRenderCapacity get renderCapacity => _renderCapacity;
 
+  /// Native/backend graph diagnostics snapshot.
+  ///
+  /// On non-native backends this may report `0` for unsupported counters.
+  WAAudioGraphStats get graphStats => WAAudioGraphStats(
+        liveNodeCount: backend.contextGetLiveNodeCount(_ctxId),
+        feedbackBridgeCount: backend.contextGetFeedbackBridgeCount(_ctxId),
+        machineVoiceGroupCount:
+            backend.contextGetMachineVoiceGroupCount(_ctxId),
+      );
+
   /// Output timestamp pair.
   WAAudioTimestamp getOutputTimestamp() {
     final ts = backend.contextGetOutputTimestamp(_ctxId);

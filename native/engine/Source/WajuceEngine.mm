@@ -386,9 +386,23 @@ int32_t Engine::createWorkletBridge(int32_t inputs, int32_t outputs) {
                     std::make_unique<WorkletBridgeProcessor>(inputs, outputs));
 }
 
-void Engine::removeNode(int32_t nodeId) {
+int32_t Engine::getLiveNodeCount() {
   std::lock_guard<std::mutex> lock(graphMtx);
-  constexpr auto updateKind = juce::AudioProcessorGraph::UpdateKind::async;
+  return static_cast<int32_t>(idToGraphNode.size());
+}
+
+int32_t Engine::getFeedbackBridgeCount() {
+  std::lock_guard<std::mutex> lock(graphMtx);
+  return static_cast<int32_t>(feedbackConnections.size());
+}
+
+int32_t Engine::getMachineVoiceGroupCount() {
+  std::lock_guard<std::mutex> lock(graphMtx);
+  return static_cast<int32_t>(machineVoiceGroups.size());
+}
+
+void Engine::removeNodeInternal(
+    int32_t nodeId, juce::AudioProcessorGraph::UpdateKind updateKind) {
   auto it = idToGraphNode.find(nodeId);
   if (it != idToGraphNode.end()) {
     graph->removeNode(it->second, updateKind);
@@ -408,6 +422,32 @@ void Engine::removeNode(int32_t nodeId) {
   }
 
   registry.remove(nodeId);
+  machineVoiceRootByNode.erase(nodeId);
+}
+
+void Engine::removeNode(int32_t nodeId) {
+  std::lock_guard<std::mutex> lock(graphMtx);
+  constexpr auto updateKind = juce::AudioProcessorGraph::UpdateKind::async;
+
+  auto rootIt = machineVoiceRootByNode.find(nodeId);
+  if (rootIt != machineVoiceRootByNode.end()) {
+    const int32_t rootId = rootIt->second;
+    auto groupIt = machineVoiceGroups.find(rootId);
+    if (groupIt != machineVoiceGroups.end()) {
+      const auto members = groupIt->second;
+      machineVoiceGroups.erase(groupIt);
+      for (const auto memberId : members) {
+        machineVoiceRootByNode.erase(memberId);
+      }
+      for (const auto memberId : members) {
+        removeNodeInternal(memberId, updateKind);
+      }
+      return;
+    }
+    machineVoiceRootByNode.erase(rootIt);
+  }
+
+  removeNodeInternal(nodeId, updateKind);
 }
 
 // Batch creation for Machine Voice
@@ -578,6 +618,18 @@ void Engine::createMachineVoice(int32_t *resultIds) {
     conn.receiver = feedbackReceiverNodeId;
     conn.buffer = feedbackSharedBuffer;
     feedbackConnections.push_back(conn);
+  }
+
+  // Register machine-voice lifecycle group (root: oscillator).
+  const int32_t rootId = resultIds[0];
+  std::vector<int32_t> members;
+  members.reserve(7);
+  for (int i = 0; i < 7; ++i) {
+    members.push_back(resultIds[i]);
+  }
+  machineVoiceGroups[rootId] = members;
+  for (const auto memberId : members) {
+    machineVoiceRootByNode[memberId] = rootId;
   }
 }
 
@@ -1078,6 +1130,19 @@ FFI_PLUGIN_EXPORT void wajuce_context_destroy(int32_t id) {
 FFI_PLUGIN_EXPORT double wajuce_context_get_time(int32_t id) {
   auto *e = getEngine(id);
   return e ? e->getCurrentTime() : 0.0;
+}
+FFI_PLUGIN_EXPORT int32_t wajuce_context_get_live_node_count(int32_t id) {
+  auto *e = getEngine(id);
+  return e ? e->getLiveNodeCount() : 0;
+}
+FFI_PLUGIN_EXPORT int32_t wajuce_context_get_feedback_bridge_count(int32_t id) {
+  auto *e = getEngine(id);
+  return e ? e->getFeedbackBridgeCount() : 0;
+}
+FFI_PLUGIN_EXPORT int32_t
+wajuce_context_get_machine_voice_group_count(int32_t id) {
+  auto *e = getEngine(id);
+  return e ? e->getMachineVoiceGroupCount() : 0;
 }
 FFI_PLUGIN_EXPORT double wajuce_context_get_sample_rate(int32_t id) {
   auto *e = getEngine(id);

@@ -185,6 +185,13 @@ final _contextDestroy =
     _lib.lookupFunction<_CtxVoidN, _CtxVoidD>('wajuce_context_destroy');
 final _contextGetTime =
     _lib.lookupFunction<_CtxDoubleN, _CtxDoubleD>('wajuce_context_get_time');
+final _contextGetLiveNodeCount = _lib
+    .lookupFunction<_CtxIntN, _CtxIntD>('wajuce_context_get_live_node_count');
+final _contextGetFeedbackBridgeCount = _lib.lookupFunction<_CtxIntN, _CtxIntD>(
+    'wajuce_context_get_feedback_bridge_count');
+final _contextGetMachineVoiceGroupCount =
+    _lib.lookupFunction<_CtxIntN, _CtxIntD>(
+        'wajuce_context_get_machine_voice_group_count');
 final _contextGetSampleRate = _lib
     .lookupFunction<_CtxDoubleN, _CtxDoubleD>('wajuce_context_get_sample_rate');
 final _contextGetBitDepth =
@@ -425,6 +432,11 @@ int contextCreate(int sampleRate, int bufferSize,
 
 void contextDestroy(int ctxId) => _contextDestroy(ctxId);
 double contextGetTime(int ctxId) => _contextGetTime(ctxId);
+int contextGetLiveNodeCount(int ctxId) => _contextGetLiveNodeCount(ctxId);
+int contextGetFeedbackBridgeCount(int ctxId) =>
+    _contextGetFeedbackBridgeCount(ctxId);
+int contextGetMachineVoiceGroupCount(int ctxId) =>
+    _contextGetMachineVoiceGroupCount(ctxId);
 double contextGetSampleRate(int ctxId) => _contextGetSampleRate(ctxId);
 int contextGetBitDepth(int ctxId) => _contextGetBitDepth(ctxId);
 bool contextSetPreferredSampleRate(int ctxId, double sampleRate) =>

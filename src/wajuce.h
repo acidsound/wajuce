@@ -30,6 +30,11 @@ FFI_PLUGIN_EXPORT int32_t wajuce_context_create(int32_t sample_rate,
                                                 int32_t output_channels);
 FFI_PLUGIN_EXPORT void wajuce_context_destroy(int32_t ctx_id);
 FFI_PLUGIN_EXPORT double wajuce_context_get_time(int32_t ctx_id);
+FFI_PLUGIN_EXPORT int32_t wajuce_context_get_live_node_count(int32_t ctx_id);
+FFI_PLUGIN_EXPORT int32_t
+wajuce_context_get_feedback_bridge_count(int32_t ctx_id);
+FFI_PLUGIN_EXPORT int32_t
+wajuce_context_get_machine_voice_group_count(int32_t ctx_id);
 FFI_PLUGIN_EXPORT double wajuce_context_get_sample_rate(int32_t ctx_id);
 FFI_PLUGIN_EXPORT int32_t wajuce_context_get_bit_depth(int32_t ctx_id);
 FFI_PLUGIN_EXPORT int32_t
@@ -62,7 +67,8 @@ FFI_PLUGIN_EXPORT int32_t wajuce_create_wave_shaper(int32_t ctx_id);
 FFI_PLUGIN_EXPORT void wajuce_create_machine_voice(int32_t ctx_id,
                                                    int32_t *result_ids);
 
-FFI_PLUGIN_EXPORT void wajuce_remove_node(int32_t ctx_id, int32_t node_id);
+FFI_PLUGIN_EXPORT void wajuce_context_remove_node(int32_t ctx_id,
+                                                  int32_t node_id);
 FFI_PLUGIN_EXPORT int32_t wajuce_create_media_stream_source(int32_t ctx_id);
 FFI_PLUGIN_EXPORT int32_t
 wajuce_create_media_stream_destination(int32_t ctx_id);

@@ -21,6 +21,9 @@ int contextCreate(int sampleRate, int bufferSize,
     _unsupported();
 void contextDestroy(int ctxId) => _unsupported();
 double contextGetTime(int ctxId) => _unsupported();
+int contextGetLiveNodeCount(int ctxId) => 0;
+int contextGetFeedbackBridgeCount(int ctxId) => 0;
+int contextGetMachineVoiceGroupCount(int ctxId) => 0;
 double contextGetSampleRate(int ctxId) => _unsupported();
 int contextGetBitDepth(int ctxId) => 32;
 bool contextSetPreferredSampleRate(int ctxId, double sampleRate) => false;

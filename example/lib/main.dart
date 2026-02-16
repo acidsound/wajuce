@@ -312,7 +312,7 @@ class _MainScreenState extends State<MainScreen>
     osc.frequency.value = 1320.0;
     gain.gain.value = 0.0;
 
-    osc.connect(gain);
+    osc.connectOwned(gain);
     gain.connect(ctx.destination);
 
     final t = ctx.currentTime + 0.002;
@@ -321,11 +321,6 @@ class _MainScreenState extends State<MainScreen>
     gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.10);
     osc.start(t);
     osc.stop(t + 0.12);
-
-    Future.delayed(const Duration(milliseconds: 250), () {
-      osc.dispose();
-      gain.dispose();
-    });
   }
 
   Future<void> _runAutoDemo() async {
@@ -508,7 +503,7 @@ class _SynthPadScreenState extends State<SynthPadScreen> {
     _gain = widget.ctx.createGain();
     _gain!.gain.value = 0;
 
-    _osc!.connect(_gain!);
+    _osc!.connectOwned(_gain!);
     _gain!.connect(widget.ctx.destination);
 
     _osc!.start();
@@ -745,23 +740,11 @@ class _DrumPadScreenState extends State<DrumPadScreen> {
     final gain = widget.ctx.createGain();
     gain.gain.value = _gain;
 
-    source.connect(panner);
-    panner.connect(gain);
+    source.connectOwned(panner);
+    panner.connectOwned(gain);
     gain.connect(widget.ctx.destination);
 
     source.start();
-
-    // Dispose after play (approximate duration)
-    Future.delayed(
-        Duration(
-            milliseconds:
-                ((_sampleBuffer!.length / _sampleBuffer!.sampleRate) * 1000 +
-                        500)
-                    .toInt()), () {
-      source.dispose();
-      panner.dispose();
-      gain.dispose();
-    });
   }
 
   void demoSetTune(double value) {
@@ -911,12 +894,6 @@ class MachineVoice {
 
   void dispose() {
     osc.dispose();
-    filter.dispose();
-    gain.dispose();
-    delay.dispose();
-    delayFb.dispose();
-    delayWet.dispose();
-    panner.dispose();
   }
 }
 
@@ -986,15 +963,15 @@ class MachineVoicePool {
       delayWet.gain.value = 0; // Delay wet mix starts disabled
 
       // Basic routing for machine voice
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(panner);
+      osc.connectOwned(filter);
+      filter.connectOwned(gain);
+      gain.connectOwned(panner);
 
       // Delay routing
-      gain.connect(delay);
-      delay.connect(delayFb);
+      gain.connectOwned(delay);
+      delay.connectOwned(delayFb);
       delayFb.connect(delay);
-      delay.connect(delayWet);
+      delay.connectOwned(delayWet);
 
       panner.connect(output);
       delayWet.connect(output);
@@ -1139,7 +1116,7 @@ class _SequencerScreenState extends State<SequencerScreen> {
     // We connect it to a dummy silent gain to force the browser to run the processor.
     _clockSink = widget.ctx.createGain();
     _clockSink!.gain.value = 0.0;
-    _clockNode!.connect(_clockSink!);
+    _clockNode!.connectOwned(_clockSink!);
     _clockSink!.connect(widget.ctx.destination);
 
     _clockNode!.port.onMessage = (data) {

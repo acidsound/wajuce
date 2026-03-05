@@ -2,12 +2,16 @@
 enum WAOscillatorType {
   /// Sine wave.
   sine,
+
   /// Square wave.
   square,
+
   /// Sawtooth wave.
   sawtooth,
+
   /// Triangle wave.
   triangle,
+
   /// Custom waveform.
   custom,
 }
@@ -16,18 +20,25 @@ enum WAOscillatorType {
 enum WABiquadFilterType {
   /// Low-pass filter.
   lowpass,
+
   /// High-pass filter.
   highpass,
+
   /// Band-pass filter.
   bandpass,
+
   /// Low-shelf filter.
   lowshelf,
+
   /// High-shelf filter.
   highshelf,
+
   /// Peaking filter.
   peaking,
+
   /// Notch filter.
   notch,
+
   /// All-pass filter.
   allpass,
 }
@@ -36,8 +47,10 @@ enum WABiquadFilterType {
 enum WAAudioContextState {
   /// Context is suspended.
   suspended,
+
   /// Context is running and processing audio.
   running,
+
   /// Context is closed and its resources may have been released.
   closed,
 }
@@ -46,6 +59,7 @@ enum WAAudioContextState {
 enum WAAutomationRate {
   /// a-rate: Parameter is updated at the sample rate.
   aRate,
+
   /// k-rate: Parameter is updated at the block rate.
   kRate,
 }
@@ -54,8 +68,10 @@ enum WAAutomationRate {
 enum WADistanceModel {
   /// Linear distance model.
   linear,
+
   /// Inverse distance model.
   inverse,
+
   /// Exponential distance model.
   exponential,
 }
@@ -64,6 +80,7 @@ enum WADistanceModel {
 enum WAPanningModel {
   /// Equal-power panning.
   equalpower,
+
   /// HRTF (Head-Related Transfer Function) panning.
   hrtf,
 }
@@ -72,8 +89,10 @@ enum WAPanningModel {
 enum WAOverSampleType {
   /// No oversampling.
   none,
+
   /// 2x oversampling.
   x2,
+
   /// 4x oversampling.
   x4,
 }
@@ -82,8 +101,10 @@ enum WAOverSampleType {
 enum WAChannelCountMode {
   /// Max number of channels in use.
   max,
+
   /// Clamped to max number of channels.
   clampedMax,
+
   /// Explicit number of channels.
   explicit,
 }
@@ -92,6 +113,7 @@ enum WAChannelCountMode {
 enum WAChannelInterpretation {
   /// Speaker-based interpretation.
   speakers,
+
   /// Discrete channel interpretation.
   discrete,
 }

@@ -6,6 +6,7 @@
 * **RT-Safe Processing**: Removed audio-thread dynamic buffer growth in critical gain/delay paths, switched automation registry access to non-blocking lock attempts, and tightened ring-buffer access around atomic read/write positions.
 * **Context Channel Configuration**: Added explicit `inputChannels` / `outputChannels` handling in `WAContext` while preserving `numberOfChannels` compatibility, so requested I/O topology survives context recreation more predictably.
 * **Example Sequencer Diagnostics**: Added sequencer/clock transport instrumentation in the example app for future reproduction of `tick timeout`, worklet clock state changes, and transport stop scenarios without changing library API semantics.
+* **Package Metadata Cleanup**: Restored formatter cleanliness in older library files and added a no-op Flutter web plugin registrant so pub.dev platform detection matches the existing web backend support.
 
 ## 0.2.3
 

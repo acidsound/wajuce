@@ -19,6 +19,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
   ffi: ^2.1.0
 
 dev_dependencies:
@@ -38,3 +40,6 @@ flutter:
         ffiPlugin: true
       windows:
         ffiPlugin: true
+      web:
+        pluginClass: WajuceWebPlugin
+        fileName: wajuce_web.dart

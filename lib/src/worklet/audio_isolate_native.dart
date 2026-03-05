@@ -2,6 +2,7 @@
 /// Native-specific utilities for Audio Isolate.
 library;
 
+import 'dart:developer' as developer;
 import 'dart:typed_data';
 import 'dart:ffi' as ffi;
 import 'wa_worklet_processor.dart';
@@ -40,37 +41,73 @@ class BridgedNodeInfo {
   });
 }
 
-BridgedNodeInfo? setupBridgedNode(int bridgeId, WAWorkletProcessor processor) {
+BridgedNodeInfo? setupBridgedNode(
+    int contextId, int bridgeId, WAWorkletProcessor processor) {
   try {
-    final capacity = backend.workletGetCapacity(bridgeId);
+    final capacity = backend.workletGetCapacity(contextId, bridgeId);
     if (capacity <= 0) return null;
 
-    const numInputs = 2;
-    const numOutputs = 2;
+    final numInputs = backend.workletGetInputChannelCount(contextId, bridgeId);
+    final numOutputs =
+        backend.workletGetOutputChannelCount(contextId, bridgeId);
+    if (numInputs <= 0 || numOutputs <= 0) {
+      developer.log(
+        'WorkletBridge setup failed: invalid channel config '
+        'ctx=$contextId bridge=$bridgeId in=$numInputs out=$numOutputs',
+        name: 'wajuce',
+      );
+      return null;
+    }
 
     final toChannels = <RingBuffer>[];
     for (int i = 0; i < numInputs; i++) {
+      final bufferPtr = _toFloatPtr(
+        backend.workletGetBufferPtr(contextId, bridgeId, 0, i),
+      );
+      if (bufferPtr.address == 0) {
+        developer.log(
+          'WorkletBridge setup failed: missing input buffer '
+          'ctx=$contextId bridge=$bridgeId ch=$i',
+          name: 'wajuce',
+        );
+        return null;
+      }
       toChannels.add(NativeRingBuffer(
         capacity,
-        _toFloatPtr(backend.workletGetBufferPtr(bridgeId, 0, i)),
-        getReadPos: () => backend.workletGetReadPos(bridgeId, 0, i),
-        getWritePos: () => backend.workletGetWritePos(bridgeId, 0, i),
-        setReadPos: (value) => backend.workletSetReadPos(bridgeId, 0, i, value),
+        bufferPtr,
+        getReadPos: () => backend.workletGetReadPos(contextId, bridgeId, 0, i),
+        getWritePos: () =>
+            backend.workletGetWritePos(contextId, bridgeId, 0, i),
+        setReadPos: (value) =>
+            backend.workletSetReadPos(contextId, bridgeId, 0, i, value),
         setWritePos: (value) =>
-            backend.workletSetWritePos(bridgeId, 0, i, value),
+            backend.workletSetWritePos(contextId, bridgeId, 0, i, value),
       ));
     }
 
     final fromChannels = <RingBuffer>[];
     for (int i = 0; i < numOutputs; i++) {
+      final bufferPtr = _toFloatPtr(
+        backend.workletGetBufferPtr(contextId, bridgeId, 1, i),
+      );
+      if (bufferPtr.address == 0) {
+        developer.log(
+          'WorkletBridge setup failed: missing output buffer '
+          'ctx=$contextId bridge=$bridgeId ch=$i',
+          name: 'wajuce',
+        );
+        return null;
+      }
       fromChannels.add(NativeRingBuffer(
         capacity,
-        _toFloatPtr(backend.workletGetBufferPtr(bridgeId, 1, i)),
-        getReadPos: () => backend.workletGetReadPos(bridgeId, 1, i),
-        getWritePos: () => backend.workletGetWritePos(bridgeId, 1, i),
-        setReadPos: (value) => backend.workletSetReadPos(bridgeId, 1, i, value),
+        bufferPtr,
+        getReadPos: () => backend.workletGetReadPos(contextId, bridgeId, 1, i),
+        getWritePos: () =>
+            backend.workletGetWritePos(contextId, bridgeId, 1, i),
+        setReadPos: (value) =>
+            backend.workletSetReadPos(contextId, bridgeId, 1, i, value),
         setWritePos: (value) =>
-            backend.workletSetWritePos(bridgeId, 1, i, value),
+            backend.workletSetWritePos(contextId, bridgeId, 1, i, value),
       ));
     }
 
@@ -83,7 +120,13 @@ BridgedNodeInfo? setupBridgedNode(int bridgeId, WAWorkletProcessor processor) {
       inputs: [List.generate(numInputs, (_) => Float32List(quantumSize))],
       outputs: [List.generate(numOutputs, (_) => Float32List(quantumSize))],
     );
-  } catch (e) {
+  } catch (e, stackTrace) {
+    developer.log(
+      'WorkletBridge setup failed: ctx=$contextId bridge=$bridgeId error=$e',
+      name: 'wajuce',
+      error: e,
+      stackTrace: stackTrace,
+    );
     return null;
   }
 }

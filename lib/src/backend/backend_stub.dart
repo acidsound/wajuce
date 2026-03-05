@@ -211,17 +211,22 @@ int createWorkletNode(
         {bool useProxyProcessor = false}) =>
     _unsupported();
 
-int workletGetCapacity(int bridgeId) => _unsupported();
-int workletGetBufferPtr(int bridgeId, int type, int channel) => _unsupported();
-int workletGetReadPosPtr(int bridgeId, int type, int channel) => _unsupported();
-int workletGetWritePosPtr(int bridgeId, int type, int channel) =>
+int workletGetCapacity(int ctxId, int bridgeId) => _unsupported();
+int workletGetInputChannelCount(int ctxId, int bridgeId) => _unsupported();
+int workletGetOutputChannelCount(int ctxId, int bridgeId) => _unsupported();
+int workletGetBufferPtr(int ctxId, int bridgeId, int type, int channel) =>
     _unsupported();
-int workletGetReadPos(int bridgeId, int type, int channel) => _unsupported();
-int workletGetWritePos(int bridgeId, int type, int channel) => _unsupported();
-void workletSetReadPos(int bridgeId, int type, int channel, int value) =>
+int workletGetReadPos(int ctxId, int bridgeId, int type, int channel) =>
     _unsupported();
-void workletSetWritePos(int bridgeId, int type, int channel, int value) =>
+int workletGetWritePos(int ctxId, int bridgeId, int type, int channel) =>
     _unsupported();
+void workletSetReadPos(
+        int ctxId, int bridgeId, int type, int channel, int value) =>
+    _unsupported();
+void workletSetWritePos(
+        int ctxId, int bridgeId, int type, int channel, int value) =>
+    _unsupported();
+void workletReleaseBridge(int ctxId, int bridgeId) {}
 void workletPostMessage(int nodeId, dynamic message) => _unsupported();
 bool workletSupportsExternalProcessors() => false;
 

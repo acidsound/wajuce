@@ -153,23 +153,25 @@ typedef _CreateWorkletBridgeN = ffi.Int32 Function(
 typedef _CreateWorkletBridgeD = int Function(int, int, int);
 
 typedef _WorkletGetBufN = ffi.Pointer<ffi.Float> Function(
-    ffi.Int32, ffi.Int32, ffi.Int32);
-typedef _WorkletGetBufD = ffi.Pointer<ffi.Float> Function(int, int, int);
-
-typedef _WorkletGetPosN = ffi.Pointer<ffi.Int32> Function(
-    ffi.Int32, ffi.Int32, ffi.Int32);
-typedef _WorkletGetPosD = ffi.Pointer<ffi.Int32> Function(int, int, int);
+    ffi.Int32, ffi.Int32, ffi.Int32, ffi.Int32);
+typedef _WorkletGetBufD = ffi.Pointer<ffi.Float> Function(int, int, int, int);
 
 typedef _WorkletGetPosValueN = ffi.Int32 Function(
-    ffi.Int32, ffi.Int32, ffi.Int32);
-typedef _WorkletGetPosValueD = int Function(int, int, int);
+    ffi.Int32, ffi.Int32, ffi.Int32, ffi.Int32);
+typedef _WorkletGetPosValueD = int Function(int, int, int, int);
 
 typedef _WorkletSetPosValueN = ffi.Void Function(
-    ffi.Int32, ffi.Int32, ffi.Int32, ffi.Int32);
-typedef _WorkletSetPosValueD = void Function(int, int, int, int);
+    ffi.Int32, ffi.Int32, ffi.Int32, ffi.Int32, ffi.Int32);
+typedef _WorkletSetPosValueD = void Function(int, int, int, int, int);
 
-typedef _WorkletGetCapN = ffi.Int32 Function(ffi.Int32);
-typedef _WorkletGetCapD = int Function(int);
+typedef _WorkletGetChannelCountN = ffi.Int32 Function(ffi.Int32, ffi.Int32);
+typedef _WorkletGetChannelCountD = int Function(int, int);
+
+typedef _WorkletGetCapN = ffi.Int32 Function(ffi.Int32, ffi.Int32);
+typedef _WorkletGetCapD = int Function(int, int);
+
+typedef _WorkletReleaseBridgeN = ffi.Void Function(ffi.Int32, ffi.Int32);
+typedef _WorkletReleaseBridgeD = void Function(int, int);
 
 typedef _CreateMachineVoiceN = ffi.Void Function(
     ffi.Int32, ffi.Pointer<ffi.Int32>);
@@ -362,12 +364,12 @@ final _createWorkletBridge =
 final _workletGetBufferPtr =
     _lib.lookupFunction<_WorkletGetBufN, _WorkletGetBufD>(
         'wajuce_worklet_get_buffer_ptr');
-final _workletGetReadPosPtr =
-    _lib.lookupFunction<_WorkletGetPosN, _WorkletGetPosD>(
-        'wajuce_worklet_get_read_pos_ptr');
-final _workletGetWritePosPtr =
-    _lib.lookupFunction<_WorkletGetPosN, _WorkletGetPosD>(
-        'wajuce_worklet_get_write_pos_ptr');
+final _workletGetInputChannelCount =
+    _lib.lookupFunction<_WorkletGetChannelCountN, _WorkletGetChannelCountD>(
+        'wajuce_worklet_get_input_channel_count');
+final _workletGetOutputChannelCount =
+    _lib.lookupFunction<_WorkletGetChannelCountN, _WorkletGetChannelCountD>(
+        'wajuce_worklet_get_output_channel_count');
 final _workletGetReadPosValue =
     _lib.lookupFunction<_WorkletGetPosValueN, _WorkletGetPosValueD>(
         'wajuce_worklet_get_read_pos');
@@ -383,6 +385,9 @@ final _workletSetWritePosValue =
 final _workletGetCapacity =
     _lib.lookupFunction<_WorkletGetCapN, _WorkletGetCapD>(
         'wajuce_worklet_get_capacity');
+final _workletReleaseBridge =
+    _lib.lookupFunction<_WorkletReleaseBridgeN, _WorkletReleaseBridgeD>(
+        'wajuce_worklet_release_bridge');
 
 typedef _MidiCallbackN = ffi.Void Function(ffi.Int32 portIndex,
     ffi.Pointer<ffi.Uint8> data, ffi.Int32 len, ffi.Double timestamp);
@@ -989,30 +994,34 @@ int createWorkletNode(
 }
 
 ffi.Pointer<ffi.Float> workletGetBufferPtr(
-        int bridgeId, int direction, int channel) =>
-    _workletGetBufferPtr(bridgeId, direction, channel);
+        int ctxId, int bridgeId, int direction, int channel) =>
+    _workletGetBufferPtr(ctxId, bridgeId, direction, channel);
 
-ffi.Pointer<ffi.Int32> workletGetReadPosPtr(
-        int bridgeId, int direction, int channel) =>
-    _workletGetReadPosPtr(bridgeId, direction, channel);
+int workletGetInputChannelCount(int ctxId, int bridgeId) =>
+    _workletGetInputChannelCount(ctxId, bridgeId);
 
-ffi.Pointer<ffi.Int32> workletGetWritePosPtr(
-        int bridgeId, int direction, int channel) =>
-    _workletGetWritePosPtr(bridgeId, direction, channel);
+int workletGetOutputChannelCount(int ctxId, int bridgeId) =>
+    _workletGetOutputChannelCount(ctxId, bridgeId);
 
-int workletGetReadPos(int bridgeId, int direction, int channel) =>
-    _workletGetReadPosValue(bridgeId, direction, channel);
+int workletGetReadPos(int ctxId, int bridgeId, int direction, int channel) =>
+    _workletGetReadPosValue(ctxId, bridgeId, direction, channel);
 
-int workletGetWritePos(int bridgeId, int direction, int channel) =>
-    _workletGetWritePosValue(bridgeId, direction, channel);
+int workletGetWritePos(int ctxId, int bridgeId, int direction, int channel) =>
+    _workletGetWritePosValue(ctxId, bridgeId, direction, channel);
 
-void workletSetReadPos(int bridgeId, int direction, int channel, int value) =>
-    _workletSetReadPosValue(bridgeId, direction, channel, value);
+void workletSetReadPos(
+        int ctxId, int bridgeId, int direction, int channel, int value) =>
+    _workletSetReadPosValue(ctxId, bridgeId, direction, channel, value);
 
-void workletSetWritePos(int bridgeId, int direction, int channel, int value) =>
-    _workletSetWritePosValue(bridgeId, direction, channel, value);
+void workletSetWritePos(
+        int ctxId, int bridgeId, int direction, int channel, int value) =>
+    _workletSetWritePosValue(ctxId, bridgeId, direction, channel, value);
 
-int workletGetCapacity(int bridgeId) => _workletGetCapacity(bridgeId);
+int workletGetCapacity(int ctxId, int bridgeId) =>
+    _workletGetCapacity(ctxId, bridgeId);
+
+void workletReleaseBridge(int ctxId, int bridgeId) =>
+    _workletReleaseBridge(ctxId, bridgeId);
 void workletPostMessage(int nodeId, dynamic message) {
   // Native routing is handled by the Dart audio isolate manager.
 }

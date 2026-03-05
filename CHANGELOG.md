@@ -1,3 +1,12 @@
+## 0.2.4
+
+* **Native Timing Hardening**: Aligned native startup with actual device sample-rate/buffer-size, avoided coarse software downsample on near-native mismatches (for example `44.1k` requests on `48k` iOS devices), and added callback budget/xrun health diagnostics for timing investigation.
+* **Feedback/Cycle Routing Fixes**: Corrected native cycle handling to validate channels before bridge creation, use actual endpoint channel counts instead of broad 32-channel iteration, and fully remove all matching connections/feedback bridges on disconnect.
+* **Worklet Bridge Safety**: Moved native worklet bridge state to shared lifetime-managed storage, added explicit bridge release handshake after isolate-side node removal, and hardened native FFI lookup to use `contextId + bridgeId` with channel-count/capacity introspection.
+* **RT-Safe Processing**: Removed audio-thread dynamic buffer growth in critical gain/delay paths, switched automation registry access to non-blocking lock attempts, and tightened ring-buffer access around atomic read/write positions.
+* **Context Channel Configuration**: Added explicit `inputChannels` / `outputChannels` handling in `WAContext` while preserving `numberOfChannels` compatibility, so requested I/O topology survives context recreation more predictably.
+* **Example Sequencer Diagnostics**: Added sequencer/clock transport instrumentation in the example app for future reproduction of `tick timeout`, worklet clock state changes, and transport stop scenarios without changing library API semantics.
+
 ## 0.2.3
 
 * **Auto-Dispose (Phase 1)**: Added scheduled-source auto-dispose with last-write-wins `stop()` semantics and idempotent worklet ended-node cleanup path.

@@ -42,11 +42,18 @@ public:
   // State: 0=suspended, 1=running, 2=closed
   int getState() const { return state.load(); }
   double getCurrentTime() const { return currentTime.load(); }
-  double getSampleRate() const { return sampleRate; }
+  double getSampleRate() const {
+    return sampleRate.load(std::memory_order_relaxed);
+  }
   int getCurrentBitDepth() const;
   int32_t getLiveNodeCount();
   int32_t getFeedbackBridgeCount();
   int32_t getMachineVoiceGroupCount();
+  std::shared_ptr<WorkletBridgeState> getWorkletBridgeState(int32_t nodeId);
+  int32_t getWorkletBridgeInputChannelCount(int32_t nodeId);
+  int32_t getWorkletBridgeOutputChannelCount(int32_t nodeId);
+  int32_t getWorkletBridgeCapacity(int32_t nodeId);
+  void releaseWorkletBridge(int32_t nodeId);
   bool setPreferredSampleRate(double preferredSampleRate);
   bool setPreferredBitDepth(int preferredBitDepth);
   int32_t getDestinationId() const { return 0; } // destination is always ID 0
@@ -136,6 +143,8 @@ private:
 
   void processAutomation(double startTime, double sampleRate, int numSamples);
   void applyLoFiPostProcess(juce::AudioBuffer<float> &buffer);
+  void logAudioHealthIfNeeded(int numSamples);
+  void refreshAudioDeviceFormatCache();
 
   struct FeedbackConnection {
     int32_t srcId;
@@ -147,26 +156,35 @@ private:
     std::shared_ptr<juce::AudioBuffer<float>> buffer;
   };
   std::vector<FeedbackConnection> feedbackConnections;
+  std::unordered_map<int32_t, std::shared_ptr<WorkletBridgeState>>
+      workletBridgeStates;
   std::unordered_map<int32_t, std::vector<int32_t>> machineVoiceGroups;
   std::unordered_map<int32_t, int32_t> machineVoiceRootByNode;
   void removeNodeInternal(int32_t nodeId,
                           juce::AudioProcessorGraph::UpdateKind updateKind);
 
-  double sampleRate;
-  int bufferSize;
+  std::atomic<double> sampleRate{44100.0};
+  std::atomic<int> bufferSize{512};
   std::atomic<double> preferredRenderSampleRate{0.0};
   std::atomic<int> preferredRenderBitDepth{32};
   std::vector<float> sampleRateHoldValues;
   double sampleRateHoldPhase = 0.0;
   std::atomic<double> currentTime{0.0};
   std::atomic<int> state{0}; // 0=suspended
+  int64_t debugBlocksProcessed = 0;
+  int64_t debugFramesSinceLastHealthLog = 0;
+  int debugLastBlockSize = 0;
+  int debugLastXRunCount = -1;
+  double debugLastCallbackMs = 0.0;
+  double debugLastBudgetLogMs = 0.0;
+  double debugCachedDeviceSampleRate = 0.0;
+  int debugCachedDeviceBufferSize = 0;
   int64_t totalSamplesProcessed = 0;
 };
 
-extern std::unordered_map<int32_t, std::unique_ptr<Engine>> g_engines;
+extern std::unordered_map<int32_t, std::shared_ptr<Engine>> g_engines;
 extern std::mutex g_engineMtx;
 extern int32_t g_nextCtxId;
-
-Engine *findEngineForNode(int32_t nodeId);
+std::shared_ptr<Engine> findEngineForNode(int32_t nodeId);
 
 } // namespace wajuce

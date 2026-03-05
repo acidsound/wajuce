@@ -38,8 +38,23 @@ class ClockProcessor extends WAWorkletProcessor {
   double _nextTickFrame = 0.0;
   double _lastTickFrame = 0.0;
   int _step = 0;
+  int _tickCount = 0;
 
   ClockProcessor() : super(name: _clockProcessorName);
+
+  void _postDiag(String event, [Map<String, Object?> extra = const {}]) {
+    port.postMessage({
+      'type': 'diag',
+      'event': event,
+      'running': _running,
+      'step': _step,
+      'tickCount': _tickCount,
+      'currentFrame': _currentFrame,
+      'bpm': _bpm,
+      'sampleRate': _sampleRate,
+      ...extra,
+    });
+  }
 
   @override
   void init([Map<String, double> options = const {}]) {
@@ -54,10 +69,13 @@ class ClockProcessor extends WAWorkletProcessor {
           _running = true;
           _currentFrame = 0;
           _step = 0;
+          _tickCount = 0;
           _nextTickFrame = 0.0;
           _lastTickFrame = 0.0;
           _contextStartTime = (data['contextTime'] as num?)?.toDouble() ?? 0.0;
+          _postDiag('start', {'contextTime': _contextStartTime});
         } else if (data['type'] == 'stop') {
+          _postDiag('stop');
           _running = false;
         } else if (data['type'] == 'bpm') {
           final nextBpm = (data['value'] as num?)?.toDouble() ?? _bpm;
@@ -85,11 +103,13 @@ class ClockProcessor extends WAWorkletProcessor {
               _nextTickFrame = currentFrame + newFramesPer16th;
             }
           }
+          _postDiag('bpm');
         } else if (data['type'] == 'syncTime') {
           final syncContextTime =
               (data['contextTime'] as num?)?.toDouble() ?? _contextStartTime;
           // Keep frame->contextTime mapping continuous when syncing mid-play.
           _contextStartTime = syncContextTime - (_currentFrame / _sampleRate);
+          _postDiag('syncTime', {'contextTime': _contextStartTime});
         }
       }
     };
@@ -130,6 +150,13 @@ class ClockProcessor extends WAWorkletProcessor {
           'step': _step,
           'time': scheduledTime,
         });
+        _tickCount++;
+        if ((_tickCount % 16) == 0) {
+          _postDiag('tick-summary', {
+            'scheduledTime': scheduledTime,
+            'nextTickFrame': _nextTickFrame,
+          });
+        }
         _lastTickFrame = _nextTickFrame;
         _step = (_step + 1) % 16;
       }

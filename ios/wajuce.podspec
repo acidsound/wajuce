@@ -29,6 +29,7 @@ Cross-platform audio engine using JUCE for native and Web Audio API for web.
       'JUCE_DISPLAY_SPLASH_SCREEN=0',
       'JUCE_USE_DARK_SPLASH_SCREEN=0',
       'JUCE_STANDALONE_APPLICATION=0',
+      'JUCE_DISABLE_ASSERTIONS=1',
       'JUCE_IOS=1',
       'JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1',
       'JUCE_MODULE_AVAILABLE_juce_audio_basics=1',

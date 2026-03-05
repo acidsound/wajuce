@@ -50,19 +50,27 @@ class WAContext {
   late final WAWorklet _worklet;
   int _requestedSampleRate = 44100;
   int _requestedBufferSize = 512;
-  int _requestedNumberOfChannels = 2;
+  int _requestedInputChannels = 2;
+  int _requestedOutputChannels = 2;
   int _requestedBitDepth = 32;
 
   /// Creates a new AudioContext.
-  WAContext(
-      {int sampleRate = 44100,
-      int bufferSize = 512,
-      int numberOfChannels = 2}) {
+  WAContext({
+    int sampleRate = 44100,
+    int bufferSize = 512,
+    int numberOfChannels = 2,
+    int? inputChannels,
+    int? outputChannels,
+  }) {
+    final resolvedInputChannels = inputChannels ?? numberOfChannels;
+    final resolvedOutputChannels = outputChannels ?? numberOfChannels;
     _requestedSampleRate = sampleRate;
     _requestedBufferSize = bufferSize;
-    _requestedNumberOfChannels = numberOfChannels;
+    _requestedInputChannels = resolvedInputChannels;
+    _requestedOutputChannels = resolvedOutputChannels;
     _ctxId = backend.contextCreate(sampleRate, bufferSize,
-        inputChannels: numberOfChannels, outputChannels: numberOfChannels);
+        inputChannels: resolvedInputChannels,
+        outputChannels: resolvedOutputChannels);
     final destId = backend.contextGetDestinationId(_ctxId);
     _destination = WADestinationNode(
       nodeId: destId,
@@ -126,7 +134,13 @@ class WAContext {
   int get requestedBufferSize => _requestedBufferSize;
 
   /// Requested I/O channel count used when creating this context.
-  int get requestedNumberOfChannels => _requestedNumberOfChannels;
+  int get requestedNumberOfChannels => _requestedOutputChannels;
+
+  /// Requested input channel count used when creating this context.
+  int get requestedInputChannels => _requestedInputChannels;
+
+  /// Requested output channel count used when creating this context.
+  int get requestedOutputChannels => _requestedOutputChannels;
 
   /// Requested bit depth preference.
   int get requestedBitDepth => _requestedBitDepth;
@@ -231,12 +245,17 @@ class WAContext {
     int? sampleRate,
     int? bufferSize,
     int? numberOfChannels,
+    int? inputChannels,
+    int? outputChannels,
     int? bitDepth,
     bool autoResume = true,
   }) async {
     final nextSampleRate = sampleRate ?? _requestedSampleRate;
     final nextBufferSize = bufferSize ?? _requestedBufferSize;
-    final nextChannels = numberOfChannels ?? _requestedNumberOfChannels;
+    final nextInputChannels =
+        inputChannels ?? numberOfChannels ?? _requestedInputChannels;
+    final nextOutputChannels =
+        outputChannels ?? numberOfChannels ?? _requestedOutputChannels;
     final nextBitDepth = bitDepth ?? _requestedBitDepth;
 
     await close();
@@ -244,7 +263,9 @@ class WAContext {
     final next = WAContext(
       sampleRate: nextSampleRate,
       bufferSize: nextBufferSize,
-      numberOfChannels: nextChannels,
+      numberOfChannels: nextOutputChannels,
+      inputChannels: nextInputChannels,
+      outputChannels: nextOutputChannels,
     );
     if (autoResume) {
       await next.resume();

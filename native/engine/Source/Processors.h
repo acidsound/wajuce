@@ -11,6 +11,8 @@
 #include "RingBuffer.h"
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace wajuce {
@@ -194,9 +196,11 @@ public:
   }
 
   const juce::String getName() const override { return "WAGain"; }
-  void prepareToPlay(double sr, int) override {
+  void prepareToPlay(double sr, int bs) override {
     sampleRate = sr > 0.0 ? sr : 44100.0;
     smoothedGain = gain.load(std::memory_order_relaxed);
+    const int reserveSamples = juce::jmax(1024, bs);
+    sampleAccurateGains.resize((size_t)reserveSamples, smoothedGain);
   }
   void releaseResources() override {}
 
@@ -212,10 +216,10 @@ public:
       return smoothedGain;
     };
 
-    if (isAutomated.load(std::memory_order_relaxed)) {
-      if (sampleAccurateGains.size() < (size_t)numSamples) {
-        sampleAccurateGains.resize(numSamples, gain.load());
-      }
+    const bool automated =
+        isAutomated.exchange(false, std::memory_order_acq_rel);
+
+    if (automated && sampleAccurateGains.size() >= (size_t)numSamples) {
       for (int i = 0; i < numSamples; ++i) {
         const float g = smoothGain(sampleAccurateGains[i]);
         for (int ch = 0; ch < numChannels; ++ch) {
@@ -667,10 +671,13 @@ public:
   }
 
   const juce::String getName() const override { return "WADelay"; }
-  void prepareToPlay(double sr, int) override {
+  void prepareToPlay(double sr, int bs) override {
     sampleRate = sr;
     buffer.clear();
     writePos = 0;
+    const int reserveSamples = juce::jmax(1024, bs);
+    sampleAccurateDelayTimes.resize((size_t)reserveSamples,
+                                    delayTime.load(std::memory_order_relaxed));
   }
   void releaseResources() override {}
 
@@ -687,12 +694,9 @@ public:
     const int bufLen = buffer.getNumSamples();
     const int numChannels = buf.getNumChannels();
     const int numSamples = buf.getNumSamples();
-    const bool automated = isAutomated.load(std::memory_order_relaxed);
-
-    // Resize if provided buffer is smaller than current processing block
-    if (sampleAccurateDelayTimes.size() < (size_t)numSamples) {
-      sampleAccurateDelayTimes.resize(numSamples, delayTime.load());
-    }
+    const bool automated =
+        isAutomated.exchange(false, std::memory_order_acq_rel) &&
+        sampleAccurateDelayTimes.size() >= (size_t)numSamples;
 
     for (int ch = 0; ch < numChannels; ++ch) {
       float *delayData = buffer.getWritePointer(ch);
@@ -820,7 +824,7 @@ public:
   const juce::String getName() const override { return "WAFeedbackSender"; }
   void prepareToPlay(double, int samples) override {
     if (buffer && buffer->getNumSamples() < samples) {
-      buffer->setSize(2, samples);
+      buffer->setSize(buffer->getNumChannels(), samples);
     }
   }
   void releaseResources() override {}
@@ -862,7 +866,7 @@ public:
   const juce::String getName() const override { return "WAFeedbackReceiver"; }
   void prepareToPlay(double, int samples) override {
     if (buffer && buffer->getNumSamples() < samples) {
-      buffer->setSize(2, samples);
+      buffer->setSize(buffer->getNumChannels(), samples);
     }
   }
   void releaseResources() override {}
@@ -1039,6 +1043,23 @@ public:
 // ============================================================================
 // WorkletBridgeProcessor — Bridge between JUCE and Dart Audio Isolate
 // ============================================================================
+struct WorkletBridgeState {
+  WorkletBridgeState(int inputs, int outputs, int capacity = 8192)
+      : numInputs(inputs), numOutputs(outputs),
+        toIsolate(
+            std::make_shared<MultiChannelSPSCRingBuffer>(inputs, capacity)),
+        fromIsolate(
+            std::make_shared<MultiChannelSPSCRingBuffer>(outputs, capacity)) {}
+
+  const int numInputs;
+  const int numOutputs;
+  std::shared_ptr<MultiChannelSPSCRingBuffer> toIsolate;
+  std::shared_ptr<MultiChannelSPSCRingBuffer> fromIsolate;
+  std::atomic<bool> active{true};
+  std::atomic<int64_t> droppedInputSamples{0};
+  std::atomic<int64_t> outputUnderrunSamples{0};
+};
+
 class WorkletBridgeProcessor : public juce::AudioProcessor {
 public:
   WorkletBridgeProcessor(int inputs = 2, int outputs = 2)
@@ -1047,39 +1068,62 @@ public:
                 .withInput("Input", juce::AudioChannelSet::discreteChannels(32))
                 .withOutput("Output",
                             juce::AudioChannelSet::discreteChannels(32))),
-        numInputs(inputs), numOutputs(outputs) {
-    // Initial buffer creation (stereo 4096 capacity by default)
-    toIsolate = std::make_unique<MultiChannelSPSCRingBuffer>(inputs, 8192);
-    fromIsolate = std::make_unique<MultiChannelSPSCRingBuffer>(outputs, 8192);
-  }
+        bridgeState(std::make_shared<WorkletBridgeState>(inputs, outputs)),
+        numInputs(inputs), numOutputs(outputs), lastOutputSamples(outputs, 0.0f) {}
 
   const juce::String getName() const override { return "WAWorkletBridge"; }
 
   void prepareToPlay(double, int) override {
-    toIsolate->clear();
-    fromIsolate->clear();
+    bridgeState->active.store(true, std::memory_order_relaxed);
+    bridgeState->toIsolate->clear();
+    bridgeState->fromIsolate->clear();
+    std::fill(lastOutputSamples.begin(), lastOutputSamples.end(), 0.0f);
+    bridgeState->droppedInputSamples.store(0, std::memory_order_relaxed);
+    bridgeState->outputUnderrunSamples.store(0, std::memory_order_relaxed);
   }
 
   void releaseResources() override {}
 
   void processBlock(juce::AudioBuffer<float> &buf,
                     juce::MidiBuffer &) override {
+    if (!bridgeState->active.load(std::memory_order_relaxed)) {
+      buf.clear();
+      return;
+    }
+
     const int numSamples = buf.getNumSamples();
     const int activeInputs = std::min(buf.getNumChannels(), numInputs);
     const int activeOutputs = std::min(buf.getNumChannels(), numOutputs);
 
     // 1. Write Input from Engine -> Isolate
     for (int ch = 0; ch < activeInputs; ++ch) {
-      if (auto *rb = toIsolate->getChannel(ch)) {
-        rb->write(buf.getReadPointer(ch), numSamples);
+      if (auto *rb = bridgeState->toIsolate->getChannel(ch)) {
+        const int written = rb->write(buf.getReadPointer(ch), numSamples);
+        if (written < numSamples) {
+          bridgeState->droppedInputSamples.fetch_add(numSamples - written,
+                                                     std::memory_order_relaxed);
+        }
       }
     }
 
     // 2. Read Output from Isolate -> Engine
     buf.clear(); // Clear before reading from worklet
     for (int ch = 0; ch < activeOutputs; ++ch) {
-      if (auto *rb = fromIsolate->getChannel(ch)) {
-        rb->read(buf.getWritePointer(ch), numSamples);
+      if (auto *rb = bridgeState->fromIsolate->getChannel(ch)) {
+        float *out = buf.getWritePointer(ch);
+        const int read = rb->read(out, numSamples);
+        float held = lastOutputSamples[(size_t)ch];
+        if (read > 0) {
+          held = out[read - 1];
+        }
+        for (int i = read; i < numSamples; ++i) {
+          out[i] = held;
+        }
+        lastOutputSamples[(size_t)ch] = held;
+        if (read < numSamples) {
+          bridgeState->outputUnderrunSamples.fetch_add(numSamples - read,
+                                                       std::memory_order_relaxed);
+        }
       }
     }
   }
@@ -1096,11 +1140,14 @@ public:
   void changeProgramName(int, const juce::String &) override {}
   void getStateInformation(juce::MemoryBlock &) override {}
   void setStateInformation(const void *, int) override {}
+  std::shared_ptr<WorkletBridgeState> getSharedState() const {
+    return bridgeState;
+  }
 
+  std::shared_ptr<WorkletBridgeState> bridgeState;
   int numInputs;
   int numOutputs;
-  std::unique_ptr<MultiChannelSPSCRingBuffer> toIsolate;
-  std::unique_ptr<MultiChannelSPSCRingBuffer> fromIsolate;
+  std::vector<float> lastOutputSamples;
 };
 
 } // namespace wajuce

@@ -163,6 +163,11 @@ public:
     return it != nodes.end() ? &it->second : nullptr;
   }
 
+  bool contains(int32_t id) {
+    std::lock_guard<std::recursive_mutex> lock(mtx);
+    return nodes.find(id) != nodes.end();
+  }
+
   void remove(int32_t id) {
     std::lock_guard<std::recursive_mutex> lock(mtx);
     nodes.erase(id);

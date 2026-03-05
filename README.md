@@ -18,6 +18,7 @@
 - **Feedback Loops**: Built-in `FeedbackBridge` automatically handles cyclic connections in the node graph (1-block delay).
 - **Auto-Dispose Lifecycle**: Source nodes auto-dispose on `stop()`/natural end, and `connectOwned(...)` enables explicit owned-subgraph cascade cleanup.
 - **Graph Diagnostics**: `WAContext.graphStats` exposes backend live-node/feedback-bridge/machine-voice-group counters for leak checks.
+- **Native Stability Hardening**: Native backend now favors actual device format on iOS sample-rate mismatches, hardens worklet bridge teardown/routing, and exposes better callback/xrun diagnostics during timing investigations.
 - **Scheduler Policy (Example)**: Example app documents and demonstrates `Precise (Timeline)` vs `Live (Low Latency)` scheduling modes without changing Web Audio API semantics.
 - **Lo-Fi Render Targets (Example)**: Example app settings support low sample-rate/bit-depth render targets (`8k/11.025k/22.05k`, `4/8/12-bit`) with clear `Device I/O` vs `Render target` separation.
 
@@ -152,7 +153,7 @@ graph TD
 
 ---
 
-## 🚀 Current Implementation Status (2026-02-14)
+## 🚀 Current Implementation Status (2026-03-06)
 
 | Feature Group | Status | Component Coverage |
 | :--- | :---: | :--- |

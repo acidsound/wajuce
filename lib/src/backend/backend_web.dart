@@ -656,14 +656,17 @@ Future<void> webAddWorkletModule(int ctxId, String moduleIdentifier) async {
   }
 }
 
-int workletGetCapacity(int bridgeId) => 0; // Not used on Web
-int workletGetBufferPtr(int bridgeId, int type, int channel) => 0;
-int workletGetReadPosPtr(int bridgeId, int type, int channel) => 0;
-int workletGetWritePosPtr(int bridgeId, int type, int channel) => 0;
-int workletGetReadPos(int bridgeId, int type, int channel) => 0;
-int workletGetWritePos(int bridgeId, int type, int channel) => 0;
-void workletSetReadPos(int bridgeId, int type, int channel, int value) {}
-void workletSetWritePos(int bridgeId, int type, int channel, int value) {}
+int workletGetCapacity(int ctxId, int bridgeId) => 0; // Not used on Web
+int workletGetInputChannelCount(int ctxId, int bridgeId) => 0;
+int workletGetOutputChannelCount(int ctxId, int bridgeId) => 0;
+int workletGetBufferPtr(int ctxId, int bridgeId, int type, int channel) => 0;
+int workletGetReadPos(int ctxId, int bridgeId, int type, int channel) => 0;
+int workletGetWritePos(int ctxId, int bridgeId, int type, int channel) => 0;
+void workletSetReadPos(
+    int ctxId, int bridgeId, int type, int channel, int value) {}
+void workletSetWritePos(
+    int ctxId, int bridgeId, int type, int channel, int value) {}
+void workletReleaseBridge(int ctxId, int bridgeId) {}
 void workletPostMessage(int nodeId, dynamic message) {
   final port = _workletPorts[nodeId];
   if (port == null) return;

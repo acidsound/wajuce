@@ -63,8 +63,10 @@ class RingBuffer {
 /// Multi-channel ring buffer — wraps one [RingBuffer] per channel.
 class MultiChannelRingBuffer {
   final List<RingBuffer> _channels;
+
   /// The number of channels.
   final int channelCount;
+
   /// The capacity of each channel in samples.
   final int capacity;
 
@@ -76,14 +78,17 @@ class MultiChannelRingBuffer {
   List<RingBuffer> get channels => _channels;
 
   /// Write interleaved or per-channel data.
-  void writeChannel(int channel, Float32List data, [int offset = 0, int? count]) {
+  int writeChannel(int channel, Float32List data,
+      [int offset = 0, int? count]) {
     if (channel >= 0 && channel < channelCount) {
-      _channels[channel].write(data, offset, count);
+      return _channels[channel].write(data, offset, count);
     }
+    return 0;
   }
 
   /// Read from a specific channel.
-  int readChannel(int channel, Float32List output, [int offset = 0, int? count]) {
+  int readChannel(int channel, Float32List output,
+      [int offset = 0, int? count]) {
     if (channel >= 0 && channel < channelCount) {
       return _channels[channel].read(output, offset, count);
     }
@@ -94,6 +99,12 @@ class MultiChannelRingBuffer {
   int get available {
     if (_channels.isEmpty) return 0;
     return _channels.map((c) => c.available).reduce(math.min);
+  }
+
+  /// Writable samples (minimum across all channels).
+  int get space {
+    if (_channels.isEmpty) return 0;
+    return _channels.map((c) => c.space).reduce(math.min);
   }
 
   /// Clear all channels.

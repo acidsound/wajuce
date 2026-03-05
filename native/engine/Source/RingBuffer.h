@@ -75,10 +75,7 @@ public:
     writePos.store(wrapped, std::memory_order_release);
   }
 
-  // Direct pointers for Zero-Copy FFI access
   float *getBufferRawPtr() { return buffer.data(); }
-  int *getReadPosPtr() { return reinterpret_cast<int *>(&readPos); }
-  int *getWritePosPtr() { return reinterpret_cast<int *>(&writePos); }
   int getCapacity() const { return capacity; }
 
 private:

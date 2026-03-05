@@ -165,30 +165,36 @@ FFI_PLUGIN_EXPORT int32_t wajuce_create_worklet_bridge(int32_t ctx_id,
                                                        int32_t num_inputs,
                                                        int32_t num_outputs);
 // direction: 0 = To-Isolate, 1 = From-Isolate
-FFI_PLUGIN_EXPORT float *wajuce_worklet_get_buffer_ptr(int32_t bridge_id,
+FFI_PLUGIN_EXPORT float *wajuce_worklet_get_buffer_ptr(int32_t ctx_id,
+                                                       int32_t bridge_id,
                                                        int32_t direction,
                                                        int32_t channel);
-FFI_PLUGIN_EXPORT int32_t *wajuce_worklet_get_read_pos_ptr(int32_t bridge_id,
-                                                           int32_t direction,
-                                                           int32_t channel);
-FFI_PLUGIN_EXPORT int32_t *wajuce_worklet_get_write_pos_ptr(int32_t bridge_id,
-                                                            int32_t direction,
-                                                            int32_t channel);
-FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_read_pos(int32_t bridge_id,
+FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_input_channel_count(
+    int32_t ctx_id, int32_t bridge_id);
+FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_output_channel_count(
+    int32_t ctx_id, int32_t bridge_id);
+FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_read_pos(int32_t ctx_id,
+                                                      int32_t bridge_id,
                                                       int32_t direction,
                                                       int32_t channel);
-FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_write_pos(int32_t bridge_id,
+FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_write_pos(int32_t ctx_id,
+                                                       int32_t bridge_id,
                                                        int32_t direction,
                                                        int32_t channel);
-FFI_PLUGIN_EXPORT void wajuce_worklet_set_read_pos(int32_t bridge_id,
+FFI_PLUGIN_EXPORT void wajuce_worklet_set_read_pos(int32_t ctx_id,
+                                                   int32_t bridge_id,
                                                    int32_t direction,
                                                    int32_t channel,
                                                    int32_t value);
-FFI_PLUGIN_EXPORT void wajuce_worklet_set_write_pos(int32_t bridge_id,
+FFI_PLUGIN_EXPORT void wajuce_worklet_set_write_pos(int32_t ctx_id,
+                                                    int32_t bridge_id,
                                                     int32_t direction,
                                                     int32_t channel,
                                                     int32_t value);
-FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_capacity(int32_t bridge_id);
+FFI_PLUGIN_EXPORT int32_t wajuce_worklet_get_capacity(int32_t ctx_id,
+                                                      int32_t bridge_id);
+FFI_PLUGIN_EXPORT void wajuce_worklet_release_bridge(int32_t ctx_id,
+                                                     int32_t bridge_id);
 
 // ============================================================================
 // MIDI

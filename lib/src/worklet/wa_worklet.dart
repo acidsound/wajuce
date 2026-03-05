@@ -21,6 +21,7 @@ class WAWorklet {
   final Set<String> _loadedModules = {};
   final Set<int> _backendManagedNodes = {};
   final Set<int> _removedNodes = {};
+  final Set<int> _pendingBridgeReleases = {};
   bool _isolateStarted = false;
   final Map<int, void Function(dynamic)> _listeners = {};
   final Map<int, void Function()> _nodeDisposers = {};
@@ -31,6 +32,7 @@ class WAWorklet {
       _listeners[nodeId]?.call(data);
     };
     _isolateManager.onNodeEnded = _handleNodeEnded;
+    _isolateManager.onNodeRemoved = _handleNodeRemoved;
 
     _instances.add(this);
     if (!_backendListenerInstalled) {
@@ -113,9 +115,10 @@ class WAWorklet {
   int createNode(int nodeId, String processorName,
       {Map<String, double> paramDefaults = const {}, int? bridgeId}) {
     _removedNodes.remove(nodeId);
+    _pendingBridgeReleases.remove(nodeId);
     if (_factories.containsKey(processorName)) {
       _backendManagedNodes.remove(nodeId);
-      _isolateManager.createNode(nodeId, processorName,
+      _isolateManager.createNode(contextId, nodeId, processorName,
           paramDefaults: paramDefaults, bridgeId: bridgeId);
       return nodeId;
     }
@@ -139,6 +142,7 @@ class WAWorklet {
     if (_backendManagedNodes.remove(nodeId)) {
       return;
     }
+    _pendingBridgeReleases.add(nodeId);
     _isolateManager.removeNode(nodeId);
   }
 
@@ -168,11 +172,15 @@ class WAWorklet {
   /// Stop the audio isolate.
   Future<void> close() async {
     await _isolateManager.stop();
+    for (final nodeId in _pendingBridgeReleases) {
+      backend.workletReleaseBridge(contextId, nodeId);
+    }
     _listeners.clear();
     _registeredFactories.clear();
     _loadedModules.clear();
     _backendManagedNodes.clear();
     _removedNodes.clear();
+    _pendingBridgeReleases.clear();
     _nodeDisposers.clear();
     _isolateStarted = false;
 
@@ -205,5 +213,11 @@ class WAWorklet {
       return;
     }
     removeNode(nodeId);
+  }
+
+  void _handleNodeRemoved(int nodeId) {
+    if (_pendingBridgeReleases.remove(nodeId)) {
+      backend.workletReleaseBridge(contextId, nodeId);
+    }
   }
 }

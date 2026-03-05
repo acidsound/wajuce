@@ -14,6 +14,7 @@ import '../backend/backend.dart' as backend;
 class AudioIsolateManager {
   void Function(int nodeId, dynamic data)? onProcessorMessage;
   void Function(int nodeId)? onNodeEnded;
+  void Function(int nodeId)? onNodeRemoved;
 
   final Map<String, WAWorkletProcessor Function()> _factories = {};
   final Map<int, WAWorkletProcessor> _processorNodes = {};
@@ -33,7 +34,7 @@ class AudioIsolateManager {
     _factories[name] = factory;
   }
 
-  void createNode(int nodeId, String processorName,
+  void createNode(int contextId, int nodeId, String processorName,
       {Map<String, double> paramDefaults = const {}, int? bridgeId}) {
     _processorNodes.remove(nodeId)?.dispose();
 
@@ -53,6 +54,7 @@ class AudioIsolateManager {
 
   void removeNode(int nodeId) {
     _processorNodes.remove(nodeId)?.dispose();
+    onNodeRemoved?.call(nodeId);
   }
 
   void postMessage(int nodeId, dynamic data) {

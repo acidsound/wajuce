@@ -33,11 +33,13 @@ class RegisterProcessorMessage extends AudioIsolateMessage {
 }
 
 class CreateNodeMessage extends AudioIsolateMessage {
+  final int contextId;
   final int nodeId;
   final String processorName;
   final Map<String, double> paramDefaults;
   final int? bridgeId;
-  CreateNodeMessage(this.nodeId, this.processorName, this.paramDefaults,
+  CreateNodeMessage(
+      this.contextId, this.nodeId, this.processorName, this.paramDefaults,
       {this.bridgeId});
 }
 
@@ -73,6 +75,11 @@ class PortMessage extends AudioIsolateMessage {
 class NodeEndedMessage extends AudioIsolateMessage {
   final int nodeId;
   NodeEndedMessage(this.nodeId);
+}
+
+class NodeRemovedMessage extends AudioIsolateMessage {
+  final int nodeId;
+  NodeRemovedMessage(this.nodeId);
 }
 
 class StopIsolateMessage extends AudioIsolateMessage {}

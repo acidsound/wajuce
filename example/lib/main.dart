@@ -817,8 +817,7 @@ class _DrumPadScreenState extends State<DrumPadScreen> {
 
     final startAt = _liveScheduleTime;
     final decaySeconds = _decay.clamp(0.01, _decayMaxSeconds);
-    final sampleDuration =
-        _sampleBuffer!.length / _sampleBuffer!.sampleRate;
+    final sampleDuration = _sampleBuffer!.length / _sampleBuffer!.sampleRate;
     const attackSeconds = 0.003;
     const terminalFadeSeconds = 0.012;
 
@@ -828,11 +827,11 @@ class _DrumPadScreenState extends State<DrumPadScreen> {
     gain.gain.linearRampToValueAtTime(_gain, startAt + attackSeconds);
     if (decaySeconds >= sampleDuration) {
       // If decay exceeds sample length, keep full body and fade only at tail.
-      final fadeStart = startAt +
-          max(attackSeconds, sampleDuration - terminalFadeSeconds);
+      final fadeStart =
+          startAt + max(attackSeconds, sampleDuration - terminalFadeSeconds);
       gain.gain.setValueAtTime(_gain, fadeStart);
-      gain.gain.linearRampToValueAtTime(
-          0.0001, fadeStart + terminalFadeSeconds);
+      gain.gain
+          .linearRampToValueAtTime(0.0001, fadeStart + terminalFadeSeconds);
     } else {
       gain.gain.linearRampToValueAtTime(0.0001, startAt + decaySeconds);
     }
@@ -1186,10 +1185,18 @@ class _SequencerScreenState extends State<SequencerScreen> {
   WAWorkletNode? _clockNode;
   WAGainNode? _clockSink;
   static const double _staleTickDropThresholdSeconds = 0.12;
+  Timer? _tickWatchdog;
+  DateTime? _playStartedAt;
+  DateTime? _lastTickWallTime;
+  double? _lastTickScheduledTime;
+  int _lastTickStep = -1;
+  int _tickCount = 0;
+  bool _watchdogReportedTimeout = false;
 
   double get _noteSafetyAheadSeconds =>
       WASchedulerTimingPolicy.eventLeadSeconds(widget.ctx);
   double get _warmupAheadSeconds => max(0.03, _noteSafetyAheadSeconds * 2.0);
+  double get _sixteenthSeconds => 15.0 / _bpm;
 
   @override
   void initState() {
@@ -1215,6 +1222,8 @@ class _SequencerScreenState extends State<SequencerScreen> {
     _clockSink?.dispose();
 
     _clockNode = createClockWorkletNode(widget.ctx);
+    debugPrint(
+        '[wajuce] Sequencer clock node created: node=${_clockNode!.nodeId}');
 
     // CRITICAL FIX: Web AudioWorklet must be connected to be active!
     // We connect it to a dummy silent gain to force the browser to run the processor.
@@ -1224,17 +1233,24 @@ class _SequencerScreenState extends State<SequencerScreen> {
     _clockSink!.connect(widget.ctx.destination);
 
     _clockNode!.port.onMessage = (data) {
-      if (data is Map && data['type'] == 'tick') {
-        final step = (data['step'] as num?)?.toInt();
-        if (step == null) return;
-        final scheduledTime = (data['time'] as num?)?.toDouble();
-        _onTick(step, scheduledTime);
+      if (data is Map) {
+        final type = data['type'];
+        if (type == 'tick') {
+          final step = (data['step'] as num?)?.toInt();
+          if (step == null) return;
+          final scheduledTime = (data['time'] as num?)?.toDouble();
+          _onTick(step, scheduledTime);
+        } else if (type == 'diag') {
+          debugPrint(
+              '[wajuce] ClockWorklet diag: ${Map<String, Object?>.from(data)}');
+        }
       }
     };
   }
 
   @override
   void dispose() {
+    _tickWatchdog?.cancel();
     _clockNode?.dispose();
     _clockSink?.dispose();
     _pool?.dispose();
@@ -1283,8 +1299,19 @@ class _SequencerScreenState extends State<SequencerScreen> {
       _isPlaying = !_isPlaying;
       if (_isPlaying) {
         _currentStep = 0;
+        _tickCount = 0;
+        _lastTickStep = -1;
+        _lastTickWallTime = null;
+        _lastTickScheduledTime = null;
+        _watchdogReportedTimeout = false;
+        _playStartedAt = DateTime.now();
         final warmupTime = widget.ctx.currentTime + _warmupAheadSeconds;
         final timelineStart = WASchedulerTimingPolicy.scheduleTime(widget.ctx);
+        debugPrint(
+            '[wajuce] Sequencer transport start: bpm=${_bpm.toStringAsFixed(2)} '
+            'ctx=${widget.ctx.currentTime.toStringAsFixed(3)} '
+            'timelineStart=${timelineStart.toStringAsFixed(3)} '
+            'machines=${_machines.length} clockNode=${_clockNode?.nodeId}');
         for (final m in _machines) {
           _applyMachineRealtimeParams(m, atTime: warmupTime, force: true);
         }
@@ -1293,16 +1320,24 @@ class _SequencerScreenState extends State<SequencerScreen> {
           'contextTime': timelineStart,
         });
         _clockNode?.port.postMessage({'type': 'bpm', 'value': _bpm});
+        _startTickWatchdog();
       } else {
+        debugPrint(
+            '[wajuce] Sequencer transport stop: ctx=${widget.ctx.currentTime.toStringAsFixed(3)} '
+            'currentStep=$_currentStep tickCount=$_tickCount');
         _clockNode?.port.postMessage({'type': 'stop'});
         _hardStopAllMachines();
         _currentStep = -1; // Reset highlight
+        _tickWatchdog?.cancel();
       }
     });
   }
 
   void _hardStopAllMachines() {
     final stopTime = widget.ctx.currentTime + 0.001;
+    debugPrint(
+        '[wajuce] Sequencer hard stop all machines: stopTime=${stopTime.toStringAsFixed(3)} '
+        'machines=${_machines.length}');
     for (final m in _machines) {
       final v = m._voice;
       if (v == null) continue;
@@ -1410,14 +1445,56 @@ class _SequencerScreenState extends State<SequencerScreen> {
 
   void _onTick(int step, [double? scheduledTime]) {
     if (!mounted || !_isPlaying) return;
+    final wallNow = DateTime.now();
     final now = widget.ctx.currentTime;
     if (scheduledTime != null &&
         scheduledTime < now - _staleTickDropThresholdSeconds) {
+      debugPrint('[wajuce] Sequencer dropped stale tick: step=$step '
+          'scheduled=${scheduledTime.toStringAsFixed(3)} now=${now.toStringAsFixed(3)}');
       return;
+    }
+    final expectedStep = _lastTickStep >= 0 ? ((_lastTickStep + 1) % 16) : step;
+    final wallGapMs = _lastTickWallTime == null
+        ? 0
+        : wallNow.difference(_lastTickWallTime!).inMilliseconds;
+    final scheduledGapMs =
+        (_lastTickScheduledTime == null || scheduledTime == null)
+            ? 0.0
+            : (scheduledTime - _lastTickScheduledTime!) * 1000.0;
+    final expectedGapMs = _sixteenthSeconds * 1000.0;
+    if (_lastTickStep >= 0 && step != expectedStep) {
+      debugPrint(
+          '[wajuce] Sequencer tick step jump: prev=$_lastTickStep now=$step '
+          'expected=$expectedStep tickCount=$_tickCount');
+    }
+    if (_lastTickWallTime != null &&
+        wallGapMs > max(300, (expectedGapMs * 2.5).round())) {
+      debugPrint('[wajuce] Sequencer tick wall gap: gap=${wallGapMs}ms '
+          'expected=${expectedGapMs.toStringAsFixed(1)}ms '
+          'step=$step prev=$_lastTickStep ctx=${now.toStringAsFixed(3)}');
+    }
+    if (_lastTickScheduledTime != null &&
+        scheduledTime != null &&
+        scheduledGapMs > (expectedGapMs * 2.5)) {
+      debugPrint(
+          '[wajuce] Sequencer tick schedule gap: gap=${scheduledGapMs.toStringAsFixed(1)}ms '
+          'expected=${expectedGapMs.toStringAsFixed(1)}ms '
+          'step=$step scheduled=${scheduledTime.toStringAsFixed(3)}');
     }
     final triggerTime = scheduledTime == null
         ? (now + _noteSafetyAheadSeconds)
         : max(scheduledTime, now + _noteSafetyAheadSeconds);
+
+    _lastTickWallTime = wallNow;
+    _lastTickScheduledTime = scheduledTime;
+    _lastTickStep = step;
+    _tickCount++;
+    _watchdogReportedTimeout = false;
+    if ((_tickCount % 16) == 0) {
+      debugPrint(
+          '[wajuce] Sequencer tick bar: tickCount=$_tickCount step=$step '
+          'ctx=${now.toStringAsFixed(3)} trigger=${triggerTime.toStringAsFixed(3)}');
+    }
 
     for (var m in _machines) {
       if (m.steps[step]) {
@@ -1430,6 +1507,44 @@ class _SequencerScreenState extends State<SequencerScreen> {
         _currentStep = step;
       });
     }
+  }
+
+  void _startTickWatchdog() {
+    _tickWatchdog?.cancel();
+    _tickWatchdog = Timer.periodic(const Duration(milliseconds: 250), (_) {
+      if (!mounted || !_isPlaying) {
+        return;
+      }
+
+      final wallNow = DateTime.now();
+      final timeoutMs = max(750, (_sixteenthSeconds * 4000).round());
+      final lastTickWallTime = _lastTickWallTime;
+      if (lastTickWallTime == null) {
+        final playStartedAt = _playStartedAt;
+        if (playStartedAt != null) {
+          final startupGapMs = wallNow.difference(playStartedAt).inMilliseconds;
+          if (!_watchdogReportedTimeout && startupGapMs > timeoutMs) {
+            _watchdogReportedTimeout = true;
+            debugPrint('[wajuce] Sequencer watchdog: no ticks after start '
+                'gap=${startupGapMs}ms threshold=${timeoutMs}ms '
+                'ctx=${widget.ctx.currentTime.toStringAsFixed(3)} '
+                'clockNode=${_clockNode?.nodeId}');
+          }
+        }
+        return;
+      }
+
+      final gapMs = wallNow.difference(lastTickWallTime).inMilliseconds;
+      if (!_watchdogReportedTimeout && gapMs > timeoutMs) {
+        _watchdogReportedTimeout = true;
+        debugPrint('[wajuce] Sequencer watchdog: tick timeout '
+            'gap=${gapMs}ms threshold=${timeoutMs}ms '
+            'tickCount=$_tickCount lastStep=$_lastTickStep '
+            'lastScheduled=${_lastTickScheduledTime?.toStringAsFixed(3)} '
+            'ctx=${widget.ctx.currentTime.toStringAsFixed(3)} '
+            'clockNode=${_clockNode?.nodeId}');
+      }
+    });
   }
 
   void _playMachine(MachineState m, double time) {

@@ -24,6 +24,20 @@
 
 ---
 
+## Native Runtime Migration in 0.3.0
+
+Version `0.3.0` replaces the previous JUCE-based native runtime with an
+iPlug2-backed WebAudio renderer. The native backend is now implemented around
+`WAIPlugEngine` and the stable C ABI in `src/wajuce.h`; the old JUCE wrapper
+sources, JUCE submodule, `WajuceEngine`, `Processors`, and `NodeRegistry` path
+were removed from the package.
+
+This is a licensing and architecture-level migration. The Dart WebAudio-style
+API remains the compatibility target, while native iOS/macOS/desktop builds now
+link through the iPlug2 dependency path.
+
+---
+
 ## ⏱️ Scheduler Modes Guide
 
 `wajuce` keeps Web Audio API behavior intact, but application-level schedulers can use different timing policies depending on workload.

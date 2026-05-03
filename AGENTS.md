@@ -7,13 +7,14 @@
 - Core goal: WebAudio 1.1-literate developers should port with minimal rewrite.
 
 ## Current Release Status
-- Latest released version: `0.1.4`
-- Git release commit: `6a63e60` (`tag: v0.1.4`)
-- pub.dev publish for `0.1.4`: completed
+- Latest released version: `0.3.0`
+- Main release theme: native runtime migration from JUCE to iPlug2.
+- pub.dev publish for `0.3.0`: completed
 - Publish quality checks at release time:
   - `dart analyze` passed
-  - `pana` score: `160/160`
+  - native CMake smoke test passed
   - `dart pub publish --dry-run`: `0 warnings`
+  - `pana` score: `160/160`, dartdoc `0 warnings`
 
 ## Architecture Snapshot (Current)
 - `WAContext` + node graph model is the core API surface.
@@ -28,17 +29,14 @@
   - `dart.library.js_interop` -> Web backend
   - stub fallback
 
-## What Changed In 0.1.4 (Important)
-- Worklet module ergonomics and addModule flow were refactored.
-- `createMachineVoiceAsync()` is deprecated in favor of synchronous batch creation.
-- Sequencer/clock example moved to helper-driven worklet usage.
-- Native machine voice routing fixed to true stereo (not left-only effective routing).
-- Native machine voice feedback path restored with managed bridge:
-  - `Delay -> Gain -> (bridge) -> Delay` loop works continuously.
-- Delay behavior aligned with WebAudio usage pattern in example:
-  - `delayTime` stays synchronized independently of wet bypass.
-- Mic monitor behavior improved for mono-input environments (iOS upmix behavior).
-- Package docs/license/changelog/pub ignore rules updated for pub.dev quality.
+## What Changed In 0.3.0 (Important)
+- Native runtime migrated from JUCE to an iPlug2-backed WebAudio renderer.
+- Old JUCE submodule and wrapper/native graph sources were removed.
+- Native C ABI now resolves through `WAIPlugEngine`.
+- iOS and macOS example builds were validated after the migration.
+- Sequencer add-machine timing was stabilized with warm voice pooling,
+  audio-time lookahead scheduling, inactive machine voices, and silent
+  delay-branch skipping.
 
 ## Deep-Dive Handoff
 Read this first for recent debugging context and implementation rationale:

@@ -1,22 +1,35 @@
-# Exclude large JUCE vendor assets and examples
-native/engine/vendor/JUCE/examples/
-native/engine/vendor/JUCE/extras/
-native/engine/vendor/JUCE/docs/
-native/engine/vendor/JUCE/ChangeLog.md
-native/engine/vendor/JUCE/README.md
-
-# Keep only necessary engine source
-native/engine/vendor/JUCE/modules/
-
-# Specifically ignore files that are gitignored but checked in
-native/engine/vendor/JUCE/examples/Assets/Signing/InAppPurchase.keystore
-native/engine/vendor/JUCE/examples/Assets/teapot.obj
-native/engine/vendor/JUCE/examples/DemoRunner/Builds/Android/app/src/main/assets/Signing/InAppPurchase.keystore
-native/engine/vendor/JUCE/examples/DemoRunner/Builds/Android/app/src/main/assets/teapot.obj
-native/engine/vendor/JUCE/extras/AudioPluginHost/Builds/Android/app/src/main/assets/Signing/InAppPurchase.keystore
-native/engine/vendor/JUCE/extras/AudioPluginHost/Builds/Android/app/src/main/assets/teapot.obj
+# Exclude iPlug2 assets that are not required by the native runtime build.
+native/engine/vendor/iPlug2/Documentation/
+native/engine/vendor/iPlug2/Examples/
+native/engine/vendor/iPlug2/Tests/
+native/engine/vendor/iPlug2/IGraphics/
+native/engine/vendor/iPlug2/Scripts/
+native/engine/vendor/iPlug2/.claude/
+native/engine/vendor/iPlug2/.github/
+native/engine/vendor/iPlug2/.vscode/
+native/engine/vendor/iPlug2/Dependencies/Extras/
+native/engine/vendor/iPlug2/Dependencies/IGraphics/
+native/engine/vendor/iPlug2/Dependencies/IPlug/AAX_SDK/
+native/engine/vendor/iPlug2/Dependencies/IPlug/CLAP_HELPERS/
+native/engine/vendor/iPlug2/Dependencies/IPlug/CLAP_SDK/
+native/engine/vendor/iPlug2/Dependencies/IPlug/REAPER_SDK/
+native/engine/vendor/iPlug2/Dependencies/IPlug/VST2_SDK/
+native/engine/vendor/iPlug2/Dependencies/IPlug/VST3_SDK/
+native/engine/vendor/iPlug2/Dependencies/IPlug/WAM_AWP/
+native/engine/vendor/iPlug2/Dependencies/IPlug/WAM_SDK/
+native/engine/vendor/iPlug2/Dependencies/IPlug/RTAudio/doc/
+native/engine/vendor/iPlug2/Dependencies/IPlug/RTAudio/tests/
+native/engine/vendor/iPlug2/Dependencies/IPlug/RTAudio/contrib/
+native/engine/vendor/iPlug2/Dependencies/IPlug/RTMidi/doc/
+native/engine/vendor/iPlug2/Dependencies/IPlug/RTMidi/tests/
+native/engine/vendor/iPlug2/Dependencies/IPlug/RTMidi/contrib/
 
 # Exclude build artifacts and temporary files
+**/.dart_tool/
+**/.symlinks/
+**/.plugin_symlinks/
+**/Flutter/ephemeral/
+**/flutter/ephemeral/
 **/Build/
 **/Builds/
 **/*.a

@@ -1,12 +1,15 @@
-## Unreleased
+## 0.3.0 - 2026-05-03
 
-* **Native Runtime Migration**: Replaced the legacy native engine path with an iPlug2-backed WebAudio render graph and Dart FFI ABI.
+* **Native Runtime Migration**: Replaced the legacy JUCE native runtime with an iPlug2-backed WebAudio render graph and Dart FFI ABI.
+* **JUCE Removal**: Removed the old JUCE submodule, JUCE wrapper sources, `WajuceEngine`, `Processors`, and `NodeRegistry` native graph path from the package.
+* **iPlug2 Packaging**: Added `native/engine/vendor/iPlug2`, Apple wrapper sources, RtAudio/RtMidi wrapper integration, and iPlug2-oriented CocoaPods/CMake packaging.
 * **AudioNode/AudioParam Parity**: Added bounded `AudioNode.connect(...)` validation and native/web `connectParam(WAParam)` support so node outputs can modulate AudioParams.
 * **Disconnect Parity**: Added native/web-backed explicit disconnect methods for output-specific, node-route-specific, and AudioParam-specific disconnection.
 * **Native Param Rendering**: Added native AudioParam input summing with mono downmix behavior and smoke coverage for node-to-param gain and compressor-threshold modulation.
 * **Worklet Parameters**: Added Dart module parameter descriptors and fed `WAWorkletProcessor.process()` parameter blocks from the current backend scalar AudioParam values instead of passing an empty map.
 * **decodeAudioData Coverage**: Added an Apple AudioToolbox fallback for system-supported compressed formats such as AAC/MP3, while retaining direct PCM/float WAV/AIFF/AIFC parsing.
 * **Native Shared Export Fix**: Forced the static iPlug2-backed engine archive into the shared FFI library so exported `wajuce_*` C ABI symbols are present at runtime.
+* **iOS/macOS Timing Validation**: Stabilized the example sequencer machine-voice path with warm voice pooling, audio-time lookahead scheduling, inactive machine voices, and silent delay-branch skipping; verified iOS device playback after the migration.
 
 ## 0.2.4
 

@@ -63,7 +63,7 @@ abstract class WANode {
     return destination;
   }
 
-  /// Connect this node's output to an [AudioParam]-style destination.
+  /// Connect this node's output to a [WAParam]-style destination.
   ///
   /// This mirrors Web Audio's `AudioNode.connect(AudioParam)` overload. The
   /// source output is down-mixed to mono before it modulates the parameter.
@@ -151,7 +151,7 @@ abstract class WANode {
     );
   }
 
-  /// Disconnect this node's output from an [AudioParam]-style destination.
+  /// Disconnect this node's output from a [WAParam]-style destination.
   void disconnectParam(WAParam destination, {int output = 0}) {
     _validateSameContext(destination.contextId);
     _validateOutput(output);

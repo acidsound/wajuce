@@ -1,3 +1,9 @@
+## 0.3.1 - 2026-05-03
+
+* **Web Analyser Fix**: Fixed Web/WASM analyser readback so `getByteTimeDomainData`, `getByteFrequencyData`, `getFloatTimeDomainData`, and `getFloatFrequencyData` return browser-filled typed-array data instead of stale Dart-side buffers.
+* **Web I/O Visualizer**: Restored I/O & Rec oscilloscope updates for decoded file playback and microphone analysis paths, independent of monitor on/off state.
+* **WebAssembly Compatibility**: Removed invalid runtime type checks from the web worklet message bridge and raised the Dart SDK lower bound to `^3.6.0` for typed-array interop constructors required by the fix.
+
 ## 0.3.0 - 2026-05-03
 
 * **Native Runtime Migration**: Replaced the legacy JUCE native runtime with an iPlug2-backed WebAudio render graph and Dart FFI ABI.

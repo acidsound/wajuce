@@ -139,30 +139,24 @@ JSAudioParam? _getParam(int nodeId, String paramName) {
 }
 
 @JS('JSON.stringify')
-external JSString _jsonStringify(JSAny? value);
+external JSString? _jsonStringify(JSAny? value);
 
 @JS('JSON.parse')
 external JSAny _jsonParse(JSString source);
 
-dynamic _jsMessageToDart(dynamic value) {
+dynamic _jsMessageToDart(JSAny? value) {
   if (value == null) return null;
-  if (value is JSString) return value.toDart;
-  if (value is JSNumber) return value.toDartDouble;
-  if (value is JSBoolean) return value.toDart;
-  if (value is JSObject || value is JSArray) {
-    try {
-      final json = _jsonStringify(value as JSAny?);
-      return jsonDecode(json.toDart);
-    } catch (_) {
-      return value;
-    }
+  try {
+    final json = _jsonStringify(value);
+    if (json == null) return null;
+    return jsonDecode(json.toDart);
+  } catch (_) {
+    return value;
   }
-  return value;
 }
 
 JSAny? _dartMessageToJs(dynamic value) {
   if (value == null) return null;
-  if (value is JSAny) return value;
   if (value is String) return value.toJS;
   if (value is bool) return value.toJS;
   if (value is int) return value.toJS;
@@ -623,14 +617,14 @@ int createWorkletNode(
       'onmessage'.toJS,
       (JSObject event) {
         final payload = event.getProperty('data'.toJS);
-        if (useProxyProcessor && payload is JSObject) {
-          final type = payload.getProperty('type'.toJS);
-          if (type is JSString && type.toDart == 'process') {
-            onWebProcessQuantum?.call(id);
-            return;
-          }
+        final message = _jsMessageToDart(payload);
+        if (useProxyProcessor &&
+            message is Map &&
+            message['type'] == 'process') {
+          onWebProcessQuantum?.call(id);
+          return;
         }
-        onWebWorkletMessage?.call(id, _jsMessageToDart(payload));
+        onWebWorkletMessage?.call(id, message);
       }.toJS);
 
   return id;
@@ -1087,33 +1081,33 @@ void analyserSetSmoothingTimeConstant(int nodeId, double value) {
 Uint8List analyserGetByteFrequencyData(int nodeId, int len) {
   final node = _nodes[nodeId];
   if (node == null) return Uint8List(len);
-  final arr = Uint8List(len);
-  node.callMethod('getByteFrequencyData'.toJS, arr.toJS);
-  return arr;
+  final arr = JSUint8Array.withLength(len);
+  node.callMethod('getByteFrequencyData'.toJS, arr);
+  return Uint8List.fromList(arr.toDart);
 }
 
 Uint8List analyserGetByteTimeDomainData(int nodeId, int len) {
   final node = _nodes[nodeId];
   if (node == null) return Uint8List(len);
-  final arr = Uint8List(len);
-  node.callMethod('getByteTimeDomainData'.toJS, arr.toJS);
-  return arr;
+  final arr = JSUint8Array.withLength(len);
+  node.callMethod('getByteTimeDomainData'.toJS, arr);
+  return Uint8List.fromList(arr.toDart);
 }
 
 Float32List analyserGetFloatFrequencyData(int nodeId, int len) {
   final node = _nodes[nodeId];
   if (node == null) return Float32List(len);
-  final arr = Float32List(len);
-  node.callMethod('getFloatFrequencyData'.toJS, arr.toJS);
-  return arr;
+  final arr = JSFloat32Array.withLength(len);
+  node.callMethod('getFloatFrequencyData'.toJS, arr);
+  return Float32List.fromList(arr.toDart);
 }
 
 Float32List analyserGetFloatTimeDomainData(int nodeId, int len) {
   final node = _nodes[nodeId];
   if (node == null) return Float32List(len);
-  final arr = Float32List(len);
-  node.callMethod('getFloatTimeDomainData'.toJS, arr.toJS);
-  return arr;
+  final arr = JSFloat32Array.withLength(len);
+  node.callMethod('getFloatTimeDomainData'.toJS, arr);
+  return Float32List.fromList(arr.toDart);
 }
 
 // ---------------------------------------------------------------------------

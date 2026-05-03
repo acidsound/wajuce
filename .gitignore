@@ -45,3 +45,6 @@ native/engine/build/
 
 # Agent
 .agent/scratch/
+.playwright-mcp/
+wajuce-web-*.png
+wajuce-web-console.log

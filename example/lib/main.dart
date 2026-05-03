@@ -2089,8 +2089,11 @@ class RecorderScreen extends StatefulWidget {
 
 class _RecorderScreenState extends State<RecorderScreen> {
   static const WASchedulerMode _schedulerMode = WASchedulerMode.live;
+  static const bool _needsVisualizerPullSink =
+      bool.fromEnvironment('dart.library.js_interop');
 
   WAMediaStreamSourceNode? _micSource;
+  WAMediaStreamDestNode? _visualizerPullSink;
   WAAnalyserNode? _analyser;
   WAGainNode? _monitorGain;
   WAGainNode? _filePlaybackGain;
@@ -2130,6 +2133,10 @@ class _RecorderScreenState extends State<RecorderScreen> {
     _filePlaybackGain = widget.ctx.createGain();
     _filePlaybackGain!.gain.value = 0.9; // Keep decoded file audible by default
 
+    if (_needsVisualizerPullSink) {
+      _visualizerPullSink = widget.ctx.createMediaStreamDestination();
+      _analyser!.connect(_visualizerPullSink!);
+    }
     _analyser!.connect(_monitorGain!);
     _monitorGain!.connect(widget.ctx.destination);
     _filePlaybackGain!.connect(widget.ctx.destination);
@@ -2142,6 +2149,7 @@ class _RecorderScreenState extends State<RecorderScreen> {
     _analyser?.dispose();
     _monitorGain?.dispose();
     _filePlaybackGain?.dispose();
+    _visualizerPullSink?.dispose();
     _fileSource?.dispose();
     super.dispose();
   }

@@ -1,6 +1,0 @@
-/**
- * WajuceJUCE.mm — minimal entry point.
- * JUCE modules and WajuceEngine are now compiled separately via the podspec.
- */
-
-#import <Foundation/Foundation.h>

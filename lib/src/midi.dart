@@ -1,6 +1,6 @@
 /// MIDI API — Device enumeration, input streams, and output sending.
 ///
-/// Mirrors the Web MIDI API with platform-native support via JUCE.
+/// Mirrors the Web MIDI API with platform-native runtime support.
 /// ```dart
 /// final midi = WAMidi();
 /// await midi.requestAccess();

@@ -20,6 +20,7 @@ class WAOscillatorNode extends WAScheduledSourceNode {
     required super.contextId,
   }) {
     frequency = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'frequency',
       defaultValue: 440.0,
@@ -27,6 +28,7 @@ class WAOscillatorNode extends WAScheduledSourceNode {
       maxValue: 22050.0,
     );
     detune = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'detune',
       defaultValue: 0.0,
@@ -75,7 +77,7 @@ class WAOscillatorNode extends WAScheduledSourceNode {
       throw ArgumentError('Real and Imag arrays must have same length');
     }
 
-    backend.oscSetPeriodicWave(
-        nodeId, periodicWave.real, periodicWave.imag, len);
+    backend.oscSetPeriodicWave(nodeId, periodicWave.real, periodicWave.imag,
+        len, periodicWave.disableNormalization);
   }
 }

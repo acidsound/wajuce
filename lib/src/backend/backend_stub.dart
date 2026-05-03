@@ -34,6 +34,9 @@ void contextSuspend(int ctxId) => _unsupported();
 void contextClose(int ctxId) => _unsupported();
 int contextGetDestinationId(int ctxId) => _unsupported();
 int contextGetListenerId(int ctxId) => _unsupported();
+List<Float32List> contextRender(int ctxId, int frames, int channels) =>
+    List<Float32List>.generate(channels.clamp(0, 32).toInt(),
+        (_) => Float32List(frames.clamp(0, 0x7fffffff).toInt()));
 double contextGetBaseLatency(int ctxId) => 0.0;
 double contextGetOutputLatency(int ctxId) => 0.0;
 Object contextGetSinkId(int ctxId) => 'default';
@@ -71,6 +74,8 @@ int createScriptProcessor(
 int createChannelSplitter(int ctxId, int outputs) => _unsupported();
 int createChannelMerger(int ctxId, int inputs) => _unsupported();
 List<int> createMachineVoice(int ctxId) => _unsupported();
+void setMachineVoiceActive(int ctxId, int nodeId, bool active) =>
+    _unsupported();
 
 // ---------------------------------------------------------------------------
 // Graph
@@ -78,7 +83,19 @@ List<int> createMachineVoice(int ctxId) => _unsupported();
 
 void connect(int ctxId, int srcId, int dstId, int output, int input) =>
     _unsupported();
+void connectParam(
+        int ctxId, int srcId, int dstId, String paramName, int output) =>
+    _unsupported();
 void disconnect(int ctxId, int srcId, int dstId) => _unsupported();
+void disconnectOutput(int ctxId, int srcId, int output) => _unsupported();
+void disconnectNodeOutput(int ctxId, int srcId, int dstId, int output) =>
+    _unsupported();
+void disconnectNodeInput(
+        int ctxId, int srcId, int dstId, int output, int input) =>
+    _unsupported();
+void disconnectParam(
+        int ctxId, int srcId, int dstId, String paramName, int output) =>
+    _unsupported();
 void disconnectAll(int ctxId, int srcId) {}
 void removeNode(int ctxId, int nodeId) {}
 
@@ -104,6 +121,7 @@ void paramCancelAndHold(int nodeId, String paramName, double time) =>
 void paramSetValueCurve(int nodeId, String paramName, Float32List values,
         double startTime, double duration) =>
     _unsupported();
+double paramGet(int nodeId, String paramName) => _unsupported();
 
 // ---------------------------------------------------------------------------
 // Oscillator
@@ -112,8 +130,8 @@ void paramSetValueCurve(int nodeId, String paramName, Float32List values,
 void oscSetType(int nodeId, int type) => _unsupported();
 void oscStart(int nodeId, double when) => _unsupported();
 void oscStop(int nodeId, double when) => _unsupported();
-void oscSetPeriodicWave(
-        int nodeId, Float32List real, Float32List imag, int len) =>
+void oscSetPeriodicWave(int nodeId, Float32List real, Float32List imag, int len,
+        bool disableNormalization) =>
     _unsupported();
 
 // ---------------------------------------------------------------------------

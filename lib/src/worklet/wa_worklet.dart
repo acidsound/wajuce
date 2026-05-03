@@ -17,6 +17,8 @@ class WAWorklet {
   final int sampleRate;
   final AudioIsolateManager _isolateManager = AudioIsolateManager();
   final Map<String, WAWorkletProcessor Function()> _factories = {};
+  final Map<String, Map<String, WAWorkletParameterDescriptor>>
+      _parameterDescriptors = {};
   final Set<String> _registeredFactories = {};
   final Set<String> _loadedModules = {};
   final Set<int> _backendManagedNodes = {};
@@ -69,8 +71,12 @@ class WAWorklet {
   /// [addModule] from the context, mirroring Web Audio API usage.
   @Deprecated(
       'Use WAWorkletModules.define(...) in module files and then call addModule(...).')
-  void registerProcessor(String name, WAWorkletProcessor Function() factory) {
-    _registerProcessorFactory(name, factory);
+  void registerProcessor(
+    String name,
+    WAWorkletProcessor Function() factory, {
+    List<WAWorkletParameterDescriptor> parameterDescriptors = const [],
+  }) {
+    _registerProcessorFactory(name, factory, parameterDescriptors);
   }
 
   /// Load a "module" — starts the audio isolate if needed and registers
@@ -110,6 +116,26 @@ class WAWorklet {
 
   /// Check if a processor is registered.
   bool hasProcessor(String name) => _factories.containsKey(name);
+
+  /// Returns registered parameter descriptors for [processorName].
+  Map<String, WAWorkletParameterDescriptor> parameterDescriptorsFor(
+          String processorName) =>
+      Map<String, WAWorkletParameterDescriptor>.unmodifiable(
+          _parameterDescriptors[processorName] ?? const {});
+
+  /// Resolves descriptor defaults and applies constructor overrides.
+  Map<String, double> resolveParameterDefaults(
+    String processorName,
+    Map<String, double> overrides,
+  ) {
+    final defaults = <String, double>{};
+    final descriptors = _parameterDescriptors[processorName] ?? const {};
+    for (final entry in descriptors.entries) {
+      defaults[entry.key] = entry.value.defaultValue;
+    }
+    defaults.addAll(overrides);
+    return defaults;
+  }
 
   /// Create a node that runs a registered processor.
   int createNode(int nodeId, String processorName,
@@ -177,6 +203,7 @@ class WAWorklet {
     }
     _listeners.clear();
     _registeredFactories.clear();
+    _parameterDescriptors.clear();
     _loadedModules.clear();
     _backendManagedNodes.clear();
     _removedNodes.clear();
@@ -192,8 +219,18 @@ class WAWorklet {
   }
 
   void _registerProcessorFactory(
-      String name, WAWorkletProcessor Function() factory) {
+    String name,
+    WAWorkletProcessor Function() factory, [
+    List<WAWorkletParameterDescriptor> parameterDescriptors = const [],
+  ]) {
     _factories[name] = factory;
+    final descriptors = <String, WAWorkletParameterDescriptor>{};
+    for (final descriptor in parameterDescriptors) {
+      final paramName = descriptor.name.trim();
+      if (paramName.isEmpty) continue;
+      descriptors[paramName] = descriptor;
+    }
+    _parameterDescriptors[name] = descriptors;
   }
 
   static void _dispatchBackendMessage(int nodeId, dynamic data) {

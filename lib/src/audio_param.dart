@@ -6,6 +6,7 @@ import 'backend/backend.dart' as backend;
 /// Represents an AudioParam — a parameter of an AudioNode that can be
 /// automated over time. Mirrors the Web Audio API AudioParam interface.
 class WAParam {
+  final int _contextId;
   final int _nodeId;
   final String _paramName;
   final double _defaultValue;
@@ -16,13 +17,15 @@ class WAParam {
 
   /// Creates a new AudioParameter.
   WAParam({
+    required int contextId,
     required int nodeId,
     required String paramName,
     double defaultValue = 0.0,
     double minValue = -3.4028235e38,
     double maxValue = 3.4028235e38,
     this.automationRate = WAAutomationRate.aRate,
-  })  : _nodeId = nodeId,
+  })  : _contextId = contextId,
+        _nodeId = nodeId,
         _paramName = paramName,
         _defaultValue = defaultValue,
         _minValue = minValue,
@@ -32,6 +35,15 @@ class WAParam {
   // ---------------------------------------------------------------------------
   // Properties
   // ---------------------------------------------------------------------------
+
+  /// Internal context ID used by the backend.
+  int get contextId => _contextId;
+
+  /// Internal owner node ID used by the backend.
+  int get nodeId => _nodeId;
+
+  /// Internal backend parameter name.
+  String get paramName => _paramName;
 
   /// The current value of the parameter.
   double get value => _value;

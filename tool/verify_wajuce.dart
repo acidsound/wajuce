@@ -79,9 +79,9 @@ Future<void> main(List<String> args) async {
     if (effectiveSource == 'path') {
       if (wajucePath.isEmpty) {
         info(
-            'Path source detected but --wajuce-path was not provided. Skip JUCE path checks.');
+            'Path source detected but --wajuce-path was not provided. Skip native runtime checks.');
       } else {
-        _verifyJuceModules(wajucePath);
+        _verifyIPlugRuntime(wajucePath);
       }
     }
 
@@ -92,7 +92,7 @@ Future<void> main(List<String> args) async {
     info('2) flutter pub get succeeded');
     info('3) flutter pub deps includes wajuce');
     if (effectiveSource == 'path' && wajucePath.isNotEmpty) {
-      info('4) local JUCE modules path exists');
+      info('4) local iPlug2 runtime path exists');
     }
     if (target == 'none') {
       info('5) build check skipped (target=none)');
@@ -162,12 +162,13 @@ void _verifyPubspecHasWajuce(String appRoot) {
   info('pubspec.yaml includes `wajuce`.');
 }
 
-void _verifyJuceModules(String wajucePath) {
-  final modulesPath = '$wajucePath/native/engine/vendor/JUCE/modules';
-  if (!Directory(modulesPath).existsSync()) {
-    fail('Missing JUCE modules: $modulesPath');
+void _verifyIPlugRuntime(String wajucePath) {
+  final runtimePath = '$wajucePath/native/engine/vendor/iPlug2';
+  final cmakeFile = File('$runtimePath/iPlug2.cmake');
+  if (!cmakeFile.existsSync()) {
+    fail('Missing iPlug2 runtime: $runtimePath');
   }
-  info('JUCE modules path exists: $modulesPath');
+  info('iPlug2 runtime path exists: $runtimePath');
 }
 
 Future<void> _runOrFail(

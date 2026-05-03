@@ -161,36 +161,35 @@ Future<void> _preparePathSource(String wajucePath) async {
     fail('wajuce-path does not exist: $wajucePath');
   }
 
-  final juceModules =
-      Directory('$wajucePath/native/engine/vendor/JUCE/modules');
-  if (juceModules.existsSync()) {
-    info('JUCE modules found: ${juceModules.path}');
+  final iPlugRoot = Directory('$wajucePath/native/engine/vendor/iPlug2');
+  final iPlugCmake = File('${iPlugRoot.path}/iPlug2.cmake');
+  if (iPlugCmake.existsSync()) {
+    info('iPlug2 runtime found: ${iPlugRoot.path}');
     return;
   }
 
   final gitMetadataType = FileSystemEntity.typeSync('$wajucePath/.git');
   if (gitMetadataType == FileSystemEntityType.notFound) {
     fail(
-      'Missing JUCE modules and no git metadata at $wajucePath. '
-      'Provide a wajuce checkout with JUCE vendored/submodules initialized.',
+      'Missing iPlug2 runtime and no git metadata at $wajucePath. '
+      'Provide a wajuce checkout with submodules initialized.',
     );
   }
 
-  info('JUCE modules missing. Trying: git submodule update --init --recursive');
+  info('iPlug2 runtime missing. Trying: git submodule update --init --recursive');
   final result = await runCommand(
     'git',
     ['-C', wajucePath, 'submodule', 'update', '--init', '--recursive'],
     workingDirectory: wajucePath,
   );
   if (result.exitCode != 0) {
-    fail('Failed to initialize JUCE submodule in $wajucePath.');
+    fail('Failed to initialize submodules in $wajucePath.');
   }
 
-  if (!juceModules.existsSync()) {
-    fail(
-        'JUCE modules still missing after submodule update: ${juceModules.path}');
+  if (!iPlugCmake.existsSync()) {
+    fail('iPlug2 runtime still missing after submodule update: ${iPlugRoot.path}');
   }
-  info('JUCE modules initialized: ${juceModules.path}');
+  info('iPlug2 runtime initialized: ${iPlugRoot.path}');
 }
 
 void _verifyPubspecHasWajuce(String appRoot) {

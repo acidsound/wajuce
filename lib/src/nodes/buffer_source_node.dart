@@ -26,6 +26,7 @@ class WABufferSourceNode extends WAScheduledSourceNode {
     required super.contextId,
   }) {
     playbackRate = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'playbackRate',
       defaultValue: 1.0,
@@ -33,6 +34,7 @@ class WABufferSourceNode extends WAScheduledSourceNode {
       maxValue: 3.4028235e38,
     );
     detune = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'detune',
       defaultValue: 0.0,
@@ -40,11 +42,12 @@ class WABufferSourceNode extends WAScheduledSourceNode {
       maxValue: 153600.0,
     );
     decay = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'decay',
-      defaultValue: 0.5,
+      defaultValue: 1.0e12,
       minValue: 0.001,
-      maxValue: 10.0,
+      maxValue: 3.4028235e38,
     );
   }
 

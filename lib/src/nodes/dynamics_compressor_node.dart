@@ -25,6 +25,7 @@ class WADynamicsCompressorNode extends WANode {
     required super.contextId,
   }) {
     threshold = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'threshold',
       defaultValue: -24.0,
@@ -32,6 +33,7 @@ class WADynamicsCompressorNode extends WANode {
       maxValue: 0.0,
     );
     knee = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'knee',
       defaultValue: 30.0,
@@ -39,6 +41,7 @@ class WADynamicsCompressorNode extends WANode {
       maxValue: 40.0,
     );
     ratio = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'ratio',
       defaultValue: 12.0,
@@ -46,6 +49,7 @@ class WADynamicsCompressorNode extends WANode {
       maxValue: 20.0,
     );
     attack = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'attack',
       defaultValue: 0.003,
@@ -53,6 +57,7 @@ class WADynamicsCompressorNode extends WANode {
       maxValue: 1.0,
     );
     release = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'release',
       defaultValue: 0.25,

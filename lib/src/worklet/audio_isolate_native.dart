@@ -30,6 +30,8 @@ class BridgedNodeInfo {
   final MultiChannelNativeRingBuffer fromIsolate;
   final List<List<Float32List>> inputs;
   final List<List<Float32List>> outputs;
+  final Map<String, double> paramDefaults;
+  final Map<String, Float32List> parameters;
 
   BridgedNodeInfo({
     required this.nodeId,
@@ -38,11 +40,13 @@ class BridgedNodeInfo {
     required this.fromIsolate,
     required this.inputs,
     required this.outputs,
+    required this.paramDefaults,
+    required this.parameters,
   });
 }
 
-BridgedNodeInfo? setupBridgedNode(
-    int contextId, int bridgeId, WAWorkletProcessor processor) {
+BridgedNodeInfo? setupBridgedNode(int contextId, int bridgeId,
+    WAWorkletProcessor processor, Map<String, double> paramDefaults) {
   try {
     final capacity = backend.workletGetCapacity(contextId, bridgeId);
     if (capacity <= 0) return null;
@@ -119,6 +123,8 @@ BridgedNodeInfo? setupBridgedNode(
           MultiChannelNativeRingBuffer(numOutputs, capacity, fromChannels),
       inputs: [List.generate(numInputs, (_) => Float32List(quantumSize))],
       outputs: [List.generate(numOutputs, (_) => Float32List(quantumSize))],
+      paramDefaults: workletParamDefaults(paramDefaults),
+      parameters: createParameterBlocks(paramDefaults),
     );
   } catch (e, stackTrace) {
     developer.log(
@@ -128,5 +134,38 @@ BridgedNodeInfo? setupBridgedNode(
       stackTrace: stackTrace,
     );
     return null;
+  }
+}
+
+Map<String, double> workletParamDefaults(Map<String, double> defaults) {
+  final result = <String, double>{};
+  for (final entry in defaults.entries) {
+    if (entry.key == 'sampleRate') continue;
+    result[entry.key] = entry.value;
+  }
+  return result;
+}
+
+Map<String, Float32List> createParameterBlocks(Map<String, double> defaults) {
+  final params = <String, Float32List>{};
+  for (final entry in workletParamDefaults(defaults).entries) {
+    params[entry.key] = Float32List(quantumSize)
+      ..fillRange(0, quantumSize, entry.value);
+  }
+  return params;
+}
+
+void refreshParameterBlocks(
+  int nodeId,
+  Map<String, double> defaults,
+  Map<String, Float32List> parameters,
+) {
+  for (final entry in defaults.entries) {
+    final value = backend.paramGet(nodeId, entry.key);
+    final block = parameters.putIfAbsent(
+      entry.key,
+      () => Float32List(quantumSize),
+    );
+    block.fillRange(0, quantumSize, value.isFinite ? value : entry.value);
   }
 }

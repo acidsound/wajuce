@@ -18,6 +18,8 @@ class AudioIsolateManager {
 
   final Map<String, WAWorkletProcessor Function()> _factories = {};
   final Map<int, WAWorkletProcessor> _processorNodes = {};
+  final Map<int, Map<String, double>> _paramDefaults = {};
+  final Map<int, Map<String, Float32List>> _parameterBlocks = {};
 
   Future<void> start({
     required int sampleRate,
@@ -49,11 +51,16 @@ class AudioIsolateManager {
       });
 
       _processorNodes[nodeId] = processor;
+      final defaults = _workletParamDefaults(paramDefaults);
+      _paramDefaults[nodeId] = defaults;
+      _parameterBlocks[nodeId] = _createParameterBlocks(defaults);
     }
   }
 
   void removeNode(int nodeId) {
     _processorNodes.remove(nodeId)?.dispose();
+    _paramDefaults.remove(nodeId);
+    _parameterBlocks.remove(nodeId);
     onNodeRemoved?.call(nodeId);
   }
 
@@ -67,6 +74,8 @@ class AudioIsolateManager {
       processor.dispose();
     }
     _processorNodes.clear();
+    _paramDefaults.clear();
+    _parameterBlocks.clear();
     if (identical(backend.onWebProcessQuantum, _onProcessQuantum)) {
       backend.onWebProcessQuantum = null;
     }
@@ -86,11 +95,46 @@ class AudioIsolateManager {
         [Float32List(128), Float32List(128)]
       ];
 
-      final keepAlive = processor.process(inputs, outputs, {});
+      final defaults = _paramDefaults[nodeId] ?? const <String, double>{};
+      final parameters =
+          _parameterBlocks[nodeId] ?? const <String, Float32List>{};
+      _refreshParameterBlocks(nodeId, defaults, parameters);
+      final keepAlive = processor.process(inputs, outputs, parameters);
       if (!keepAlive) {
         _processorNodes.remove(nodeId)?.dispose();
+        _paramDefaults.remove(nodeId);
+        _parameterBlocks.remove(nodeId);
         onNodeEnded?.call(nodeId);
       }
     }
+  }
+}
+
+Map<String, double> _workletParamDefaults(Map<String, double> defaults) {
+  final result = <String, double>{};
+  for (final entry in defaults.entries) {
+    if (entry.key == 'sampleRate') continue;
+    result[entry.key] = entry.value;
+  }
+  return result;
+}
+
+Map<String, Float32List> _createParameterBlocks(Map<String, double> defaults) {
+  final params = <String, Float32List>{};
+  for (final entry in defaults.entries) {
+    params[entry.key] = Float32List(128)..fillRange(0, 128, entry.value);
+  }
+  return params;
+}
+
+void _refreshParameterBlocks(
+  int nodeId,
+  Map<String, double> defaults,
+  Map<String, Float32List> parameters,
+) {
+  for (final entry in defaults.entries) {
+    final value = backend.paramGet(nodeId, entry.key);
+    final block = parameters.putIfAbsent(entry.key, () => Float32List(128));
+    block.fillRange(0, 128, value.isFinite ? value : entry.value);
   }
 }

@@ -1,8 +1,8 @@
-# wajuce Agent Context (Updated 2026-02-14)
+# wajuce Agent Context (Updated 2026-05-03)
 
 ## Project Overview
 `wajuce` is a Flutter package that exposes Web Audio API 1.1-style Dart APIs.
-- Native (iOS/Android/macOS/Windows): JUCE C++ engine via FFI.
+- Native (iOS/Android/macOS/Windows): iPlug2-backed C++ WebAudio runtime via FFI.
 - Web: `dart:js_interop` wrapper over browser Web Audio API.
 - Core goal: WebAudio 1.1-literate developers should port with minimal rewrite.
 
@@ -21,10 +21,10 @@
   - Define in Dart with `WAWorkletModules.define(...)`
   - Load with `audioWorklet.addModule(...)`
   - Create with `createWorkletNode(processorName, ...)`
-- Native cycle handling uses `FeedbackSender/FeedbackReceiver` bridge (1-block delay).
+- Native cycle handling uses a spec-oriented one-block delayed feedback path.
 - Web backend supports external worklet processors and port messaging.
 - Conditional backends:
-  - `dart.library.ffi` -> JUCE backend
+  - `dart.library.ffi` -> native FFI backend
   - `dart.library.js_interop` -> Web backend
   - stub fallback
 
@@ -57,14 +57,13 @@ Then read baseline architecture/plans:
   - `lib/src/worklet/wa_worklet_module.dart`
   - `lib/src/worklet/wa_worklet_node.dart`
 - Backends:
-  - `lib/src/backend/backend_juce.dart`
+  - `lib/src/backend/backend_native.dart`
   - `lib/src/backend/backend_web.dart`
   - `lib/src/backend/backend_stub.dart`
 - Native engine:
-  - `native/engine/Source/WajuceEngine.mm`
-  - `native/engine/Source/Processors.h`
+  - `native/engine/Source/WAIPlugEngine.cpp`
+  - `native/engine/Source/WAIPlugEngine.h`
   - `native/engine/Source/ParamAutomation.h`
-  - `native/engine/Source/NodeRegistry.h`
 - Example under active validation:
   - `example/lib/main.dart`
   - `example/lib/clock_processor.dart`

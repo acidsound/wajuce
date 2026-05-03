@@ -2,16 +2,16 @@
 
 [![Pub](https://img.shields.io/pub/v/wajuce.svg)](https://pub.dev/packages/wajuce)
 
-**JUCE-powered Web Audio API for Flutter.**
+**iPlug2-backed Web Audio API for Flutter.**
 
-`wajuce` provides a Web Audio API 1.1 compatible interface for Flutter and Dart. It allows developers to use familiar Web Audio patterns while delivering high-performance, low-latency audio processing via a native JUCE C++ backend.
+`wajuce` provides a Web Audio API 1.1 compatible interface for Flutter and Dart. It allows developers to use familiar Web Audio patterns while delivering high-performance, low-latency audio processing via a native iPlug2-backed C++ runtime.
 
 ---
 
 ## 🌟 Key Features
 
 - **Web Audio API Parity**: Mirrors `AudioContext`, `OscillatorNode`, `GainNode`, etc., making it easy to port existing JS audio engines.
-- **JUCE Backend**: Leverages the industry-standard JUCE framework for native audio processing on iOS, Android, macOS, and Windows.
+- **iPlug2 Native Runtime**: Uses an iPlug2-backed native C++ runtime for desktop/mobile FFI builds.
 - **Pure Web Support**: Automatically falls back to the browser's native Web Audio API on Web platforms via `dart:js_interop`.
 - **Zero-Overhead FFI**: Uses Dart FFI for fast communication between Dart and C++ without MethodChannel overhead.
 - **AudioWorklet Support**: Native uses high-priority Dart Isolates; Web uses browser AudioWorklet via `dart:js_interop`.
@@ -136,14 +136,14 @@ graph TD
     end
 
     subgraph "Platform Backends"
-        B -->|Native| C[backend_juce.dart]
+        B -->|Native| C[backend_native.dart]
         B -->|Web| D[backend_web.dart]
     end
 
-    subgraph "Native Layer (C++/JUCE)"
+    subgraph "Native Layer (C++/iPlug2)"
         C --> E[FFI Bridge]
-        E --> F[WajuceEngine]
-        F --> G[JUCE AudioProcessorGraph]
+        E --> F[WAIPlugEngine]
+        F --> G[WebAudio Render Graph]
     end
 
     subgraph "Web Layer (JS)"
@@ -153,19 +153,19 @@ graph TD
 
 ---
 
-## 🚀 Current Implementation Status (2026-03-06)
+## 🚀 Current Implementation Status (2026-05-03)
 
 | Feature Group | Status | Component Coverage |
 | :--- | :---: | :--- |
-| **Context & Graph** | ✅ Done | `WAContext`, `WAOfflineContext`, `connect/disconnect` |
+| **Context & Graph** | ✅ Done | `WAContext`, `WAOfflineContext`, bounded node `connect/disconnect`, `connectParam(WAParam)`, explicit output/param disconnect |
 | **Context Extras** | ✅ Done | `listener`, `baseLatency`, `outputLatency`, `sinkId`, `getOutputTimestamp()`, `renderCapacity` (minimal wrapper), `graphStats` |
 | **Multi-Channel** | ✅ Done | Support up to 32 channels, `ChannelSplitter`, `ChannelMerger` |
 | **Core Nodes** | ✅ Done | `Oscillator`, `Gain`, `BiquadFilter`, `Compressor`, `Delay`, `Analyser`, `StereoPanner`, `WaveShaper`, `BufferSource` |
-| **Extended Nodes (0.1.5)** | ✅ API Surface | `ConstantSource`, `Convolver`, `IIRFilter`, `Panner`, `MediaElementAudioSource`, `MediaStreamTrackAudioSource` (backend-specific shim/fallback where needed) |
-| **AudioParam** | ✅ Done | Full automation (12 methods including `exponentialRampToValueAtTime`) |
+| **Extended Nodes** | ✅ Native-backed | `ConstantSource`, `Convolver`, `IIRFilter`, `Panner`, media stream sources, plus web-backed media element/track sources |
+| **AudioParam** | ✅ Done | Full automation (12 methods including `exponentialRampToValueAtTime`) plus native/web audio-rate node-to-param modulation |
 | **Deprecated Compatibility** | ✅ Shim | Minimal compatibility for deprecated `ScriptProcessorNode`/`AudioProcessingEvent` |
 | **MIDI API** | ✅ Done | Hardware I/O, device enumeration, SysEx support |
-| **AudioWorklet** | ✅ Done | Native isolate bridge + Web AudioWorklet passthrough/module loading flow |
+| **AudioWorklet** | ✅ Done | Native isolate bridge + Web AudioWorklet passthrough/module loading flow, with Dart processor parameter blocks |
 | **Web Backend** | ✅ Done | Browser Web Audio passthrough via `js_interop` (pub.dev platform badge may not list Web due plugin metadata) |
 | **Build System** | ✅ Done | iOS, Android, macOS, Windows native backends + Web backend path |
 
@@ -239,18 +239,16 @@ osc.start();
 
 - `lib/src/`: Dart API implementation and backend switching logic.
 - `lib/src/backend/`: Platform-specific implementation (FFI vs JS).
-- `native/engine/`: The JUCE-based C++ audio engine.
+- `native/engine/`: The iPlug2-backed C++ WebAudio runtime.
 - `src/`: C-API headers and stubs for FFI binding.
 
 ---
 
 ## 🤖 AI Skills & Automation
 
-This project includes specialized **AI Skills** to help agents maintain the development environment.
+This project includes specialized automation to help agents maintain the development environment.
 
-- **JUCE Management (`juce_setup`)**: Automated detection and setup of the JUCE framework.
-  - Located at: `.agent/skills/juce_management/SKILL.md` (repository checkout context)
-  - Purpose: Fixes broken dependencies and configures JUCE submodules.
+- **Native runtime setup**: `tool/install_wajuce.dart` and `tool/verify_wajuce.dart` validate local/path dependency checkouts and initialize submodules when needed.
 - **Install scripts**:
   - `tool/install_wajuce.dart`
   - `tool/verify_wajuce.dart`
@@ -266,6 +264,7 @@ To use these assets, ask your AI agent:
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-The native backend links against JUCE. If you distribute products using the
-native JUCE runtime, you must also comply with JUCE's license terms:
-[JUCE 8 Licence](https://juce.com/legal/juce-8-licence/).
+The native backend uses iPlug2 plus its RtAudio/RtMidi dependency path. If you
+redistribute native builds, include and comply with the relevant notices under
+`native/engine/vendor/iPlug2/LICENSE.txt` and the dependency licenses referenced
+there.

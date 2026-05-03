@@ -18,6 +18,7 @@ enum class AutomationEventType {
   LinearRamp,
   ExponentialRamp,
   SetTarget,
+  ValueCurve,
   Cancel,
 };
 
@@ -26,6 +27,8 @@ struct AutomationEvent {
   double time;        // schedule time
   float value;        // target value
   float timeConstant; // for setTargetAtTime
+  double duration = 0.0;
+  std::vector<float> curve;
 };
 
 class ParamTimeline {
@@ -50,6 +53,19 @@ public:
     addEvent({AutomationEventType::SetTarget, startTime, target, timeConstant});
   }
 
+  void setValueCurveAtTime(const float *values, int length, double startTime,
+                           double duration) {
+    if (!values || length <= 0 || duration <= 0.0) {
+      return;
+    }
+    std::lock_guard<std::mutex> lock(mtx);
+    AutomationEvent event{AutomationEventType::ValueCurve, startTime,
+                          values[length - 1], 0.0f};
+    event.duration = duration;
+    event.curve.assign(values, values + length);
+    addEvent(event);
+  }
+
   void cancelScheduledValues(double cancelTime) {
     std::lock_guard<std::mutex> lock(mtx);
     events.erase(std::remove_if(events.begin(), events.end(),
@@ -59,9 +75,9 @@ public:
                  events.end());
   }
 
-  void cancelAndHoldAtTime(double cancelTime) {
+  void cancelAndHoldAtTime(double cancelTime, double sampleRate) {
     std::lock_guard<std::mutex> lock(mtx);
-    const float held = lastValue.load(std::memory_order_relaxed);
+    const float held = valueAtTimeUnlocked(cancelTime, sampleRate);
     events.erase(std::remove_if(events.begin(), events.end(),
                                 [cancelTime](const AutomationEvent &e) {
                                   return e.time >= cancelTime;
@@ -117,7 +133,104 @@ public:
     lastValue.store(v, std::memory_order_relaxed);
   }
 
+  bool holdsValueForBlock(float value, double startTime, double sampleRate,
+                          int numSamples, float tolerance = 1.0e-7f) {
+    std::unique_lock<std::mutex> lock(mtx, std::try_to_lock);
+    if (!lock.owns_lock()) {
+      return false;
+    }
+    if (sampleRate <= 0.0 || numSamples <= 0) {
+      return std::abs(lastValue.load(std::memory_order_relaxed) - value) <=
+             tolerance;
+    }
+    prunePastEvents(startTime);
+    const double blockEnd = startTime + static_cast<double>(numSamples) /
+                                            std::max(1.0, sampleRate);
+    for (const auto &event : events) {
+      if (event.time <= blockEnd) {
+        return false;
+      }
+      break;
+    }
+    return std::abs(lastValue.load(std::memory_order_relaxed) - value) <=
+           tolerance;
+  }
+
 private:
+  float valueAtTimeUnlocked(double time, double sampleRate) const {
+    float value = lastValue.load(std::memory_order_relaxed);
+    if (sampleRate <= 0.0) {
+      sampleRate = 44100.0;
+    }
+
+    for (size_t i = 0; i < events.size(); ++i) {
+      const auto &event = events[i];
+      if (event.type == AutomationEventType::LinearRamp ||
+          event.type == AutomationEventType::ExponentialRamp) {
+        if (i > 0 && time < event.time) {
+          const auto &previous = events[i - 1];
+          const double duration = event.time - previous.time;
+          if (duration > 0.0 && time >= previous.time) {
+            const float progress = static_cast<float>(
+                std::clamp((time - previous.time) / duration, 0.0, 1.0));
+            if (event.type == AutomationEventType::LinearRamp) {
+              return previous.value + progress * (event.value - previous.value);
+            }
+            if (previous.value > 0.0f && event.value > 0.0f) {
+              return previous.value *
+                     std::pow(event.value / previous.value, progress);
+            }
+          }
+          return value;
+        }
+        if (time >= event.time) {
+          value = event.value;
+          continue;
+        }
+      }
+
+      if (event.time > time) {
+        break;
+      }
+
+      switch (event.type) {
+      case AutomationEventType::SetValue:
+        value = event.value;
+        break;
+      case AutomationEventType::ValueCurve:
+        if (!event.curve.empty() && event.duration > 0.0) {
+          if (time >= event.time + event.duration) {
+            value = event.curve.back();
+          } else {
+            const double position =
+                ((time - event.time) / event.duration) *
+                (event.curve.size() - 1);
+            const auto i0 = static_cast<size_t>(std::floor(position));
+            const auto i1 = std::min(i0 + 1, event.curve.size() - 1);
+            const float frac =
+                static_cast<float>(position - std::floor(position));
+            value = event.curve[i0] +
+                    frac * (event.curve[i1] - event.curve[i0]);
+          }
+        }
+        break;
+      case AutomationEventType::SetTarget:
+        if (event.timeConstant > 0.0f) {
+          value = event.value + (value - event.value) *
+                                    std::exp(-(time - event.time) /
+                                             event.timeConstant);
+        }
+        break;
+      case AutomationEventType::LinearRamp:
+      case AutomationEventType::ExponentialRamp:
+      case AutomationEventType::Cancel:
+        break;
+      }
+    }
+
+    return value;
+  }
+
   float getValueAtEventIndex(float initialValue, float currentVal,
                              int currentIdx, double time, double sampleRate) {
     if (currentIdx < 0) {
@@ -135,8 +248,7 @@ private:
       if (nextE.type == AutomationEventType::LinearRamp ||
           nextE.type == AutomationEventType::ExponentialRamp) {
 
-        float startValue =
-            (currentIdx == 0) ? initialValue : events[currentIdx].value;
+        float startValue = events[currentIdx].value;
         double startTime = events[currentIdx].time;
         double endTime = nextE.time;
         float duration = (float)(endTime - startTime);
@@ -165,6 +277,23 @@ private:
       // These are discrete set-points, they just hold their value until next
       // event
       val = e.value;
+      break;
+
+    case AutomationEventType::ValueCurve:
+      if (!e.curve.empty() && e.duration > 0.0) {
+        if (time <= e.time) {
+          val = e.curve.front();
+        } else if (time >= e.time + e.duration) {
+          val = e.curve.back();
+        } else {
+          const double position =
+              ((time - e.time) / e.duration) * (e.curve.size() - 1);
+          const auto i0 = static_cast<size_t>(std::floor(position));
+          const auto i1 = std::min(i0 + 1, e.curve.size() - 1);
+          const float frac = static_cast<float>(position - std::floor(position));
+          val = e.curve[i0] + frac * (e.curve[i1] - e.curve[i0]);
+        }
+      }
       break;
 
     case AutomationEventType::SetTarget:

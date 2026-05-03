@@ -1,6 +1,6 @@
 /// wajuce — Web Audio API 1.1 for Flutter
 ///
-/// Cross-platform audio framework using JUCE for native platforms
+/// Cross-platform audio framework using an iPlug2-backed native runtime
 /// and the browser's Web Audio API for the web.
 ///
 /// ```dart

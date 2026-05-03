@@ -20,6 +20,7 @@ class WADelayNode extends WANode {
     double maxDelayTime = 1.0,
   }) : _maxDelayTime = maxDelayTime {
     delayTime = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'delayTime',
       defaultValue: 0.0,
@@ -27,6 +28,7 @@ class WADelayNode extends WANode {
       maxValue: maxDelayTime,
     );
     feedback = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'feedback',
       defaultValue: 0.0,

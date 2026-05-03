@@ -1,90 +1,39 @@
-# wajuce — JUCE-powered Web Audio API for Flutter
+# wajuce Project Context
 
 ## Overview
-Flutter plugin providing Web Audio API 1.1-compatible interfaces. 
-- **Native** (iOS/Android/macOS/Windows): JUCE C++ engine via FFI
-- **Web**: Browser Web Audio API via `dart:js_interop`
 
-## Current Implementation Status (2026-02-11)
+`wajuce` provides Web Audio API 1.1-compatible Dart APIs for Flutter.
 
-### ✅ COMPLETED
-| Phase | Content |
-|:---:|:---|
-| **1** | Foundation: Dart API (27 Dart files), 9 node types, WAParam (12 automation methods), WABuffer, WAContext/WAOfflineContext, 3-backend conditional import, C-API header (32+ functions), C stub |
-| **2** | JUCE Engine: 6 AudioProcessors (`Processors.h`), NodeRegistry, ParamAutomation timeline, WajuceEngine with AudioProcessorGraph, full C bridge (`WajuceEngine.cpp`) |
-| **3** | AudioWorklet: Dart Isolate worker, SPSC RingBuffer, WAWorkletNode with MessagePort, WAContext.audioWorklet + createWorkletNode(). **Hotfix**: Multi-listener support and reliable message routing. |
-| **4** | Buffer/I/O: `decodeAudioData()` native impl, WABufferSourceNode, MediaStream (mic/recording), **Feature**: `PeriodicWave` custom oscillators. |
-| **5** | MIDI API: WAMidi/WAMidiInput/WAMidiOutput (Dart), device enumeration, bidirectional communication (input/output). |
-| **8** | Polish: `dart analyze` → **0 issues**, CMake dual-mode (JUCE/stub), generalized 32-channel I/O. |
+- Native: iPlug2-backed C++ WebAudio runtime via Dart FFI.
+- Web: browser Web Audio API via `dart:js_interop`.
 
-### ❌ NOT YET IMPLEMENTED
-| Phase | Content |
-|:---:|:---|
-| **6** | Web backend: `backend_web.dart` has stubs only — needs actual `dart:js_interop` calls |
-| **7** | Integration examples: Porting various Web Audio engines |
+## Current Native Architecture
 
-### ⚠️ NOT YET BUILD-TESTED
-- Native build (`flutter build macos/ios/android`) has NOT been tested
-- **JUCE Framework**: Must be placed in `native/engine/vendor/JUCE`.
+- C ABI: `src/wajuce.h`
+- Native runtime: `native/engine/Source/WAIPlugEngine.cpp`
+- Parameter automation: `native/engine/Source/ParamAutomation.h`
+- Worklet bridge buffers: `native/engine/Source/RingBuffer.h`
+- Runtime dependency: `native/engine/vendor/iPlug2`
 
-## File Inventory
+The native engine owns a WebAudio-oriented render graph directly. It is not a
+translation layer from another framework graph.
 
-### Dart (lib/) — 27 files
-```
-wajuce.dart                          # Public exports
-src/context.dart                     # WAContext (AudioContext equivalent)
-src/offline_context.dart             # WAOfflineContext
-src/audio_param.dart                 # WAParam (12 automation methods)
-src/audio_buffer.dart                # WABuffer
-src/enums.dart                       # All Web Audio enums
-src/midi.dart                        # WAMidi, WAMidiInput, WAMidiOutput
-src/nodes/audio_node.dart            # WANode base class
-src/nodes/audio_destination_node.dart
-src/nodes/gain_node.dart
-src/nodes/oscillator_node.dart
-src/nodes/biquad_filter_node.dart
-src/nodes/dynamics_compressor_node.dart
-src/nodes/delay_node.dart
-src/nodes/buffer_source_node.dart
-src/nodes/analyser_node.dart
-src/nodes/stereo_panner_node.dart
-src/nodes/wave_shaper_node.dart
-src/worklet/wa_worklet.dart          # AudioWorklet manager
-src/worklet/wa_worklet_node.dart     # AudioWorkletNode
-src/worklet/wa_worklet_processor.dart # AudioWorkletProcessor base
-src/worklet/audio_isolate.dart       # Dart Isolate worker
-src/worklet/ring_buffer.dart         # SPSC lock-free buffer
-src/backend/backend.dart             # Conditional import switch
-src/backend/backend_juce.dart        # FFI → JUCE (408 lines)
-src/backend/backend_web.dart         # js_interop stubs (214 lines)
-src/backend/backend_stub.dart        # Analyzer stubs (175 lines)
+## Validation Direction
+
+Use `wajuce_context_render(...)` for deterministic native block/offline tests.
+Live device tests are secondary because they are affected by hardware format,
+driver buffer size, and permissions.
+
+## Backend Switch
+
+```dart
+export 'backend_stub.dart'
+    if (dart.library.ffi) 'backend_native.dart'
+    if (dart.library.js_interop) 'backend_web.dart';
 ```
 
-### C/C++ Native — 9 files
-```
-src/wajuce.h                         # C-API header (32+ FFI functions)
-src/wajuce.c                         # C stub implementation
-src/CMakeLists.txt                   # Dual mode: JUCE or WAJUCE_STUB_ONLY
-native/engine/CMakeLists.txt         # JUCE engine build
-native/engine/Source/WajuceEngine.h   # Engine header
-native/engine/Source/WajuceEngine.cpp # Engine + C bridge impl
-native/engine/Source/Processors.h     # 6 AudioProcessor impls
-native/engine/Source/NodeRegistry.h   # ID→Processor mapping
-native/engine/Source/ParamAutomation.h # Param scheduling timeline
-```
+## Submodule Setup
 
-## Key Design Decisions
-- **FFI over MethodChannel** for zero-overhead audio calls
-- **AudioProcessorGraph** for node routing (matches Web Audio spec)
-- **Dart Isolate** for AudioWorklet (keeps processor code in Dart)
-- **3-backend conditional import**: `dart.library.ffi` → JUCE, `dart.library.js_interop` → Web Audio, fallback → stub
-- **JUCE Framework**: Independent vendor setup in `native/engine/vendor/JUCE`
-- **WAJUCE_STUB_ONLY** CMake for building without JUCE
-- **WAWorklet Multi-Listener Routing**: `WAWorklet` maintains a listener registry to route messages from the audio isolate to multiple concurrent `WAWorkletNode` instances independently.
-- **Automatic Cyclic Connections (FeedbackBridge)**: Detects cycles during `connect()` and automatically inserts a `FeedbackSender`/`FeedbackReceiver` pair with a shared buffer (1-block delay) to allow feedback loops without violating JUCE's GraphQL DAG constraints.
-
-## Reference Documents
-> [!IMPORTANT]
-> To understand the deep technical details and roadmap of this project, ALWAYS read the following documents first:
-- **Architecture Specification**: `.agent/wajuce_architect.md`
-- **Implementation Plan**: `.agent/implementation_plan.md`
+```zsh
+git submodule update --init --recursive native/engine/vendor/iPlug2
+```

@@ -1,5 +1,5 @@
 // ignore_for_file: public_member_api_docs
-/// JUCE FFI Backend — native platform implementation.
+/// Native FFI backend — native platform implementation.
 ///
 /// Loads the compiled wajuce shared library and resolves C-API symbols
 /// at runtime via dart:ffi lazy lookups.
@@ -51,6 +51,9 @@ typedef _CtxSetPreferredSampleRateN = ffi.Int32 Function(ffi.Int32, ffi.Double);
 typedef _CtxSetPreferredSampleRateD = int Function(int, double);
 typedef _CtxSetPreferredBitDepthN = ffi.Int32 Function(ffi.Int32, ffi.Int32);
 typedef _CtxSetPreferredBitDepthD = int Function(int, int);
+typedef _CtxRenderN = ffi.Int32 Function(
+    ffi.Int32, ffi.Pointer<ffi.Float>, ffi.Int32, ffi.Int32);
+typedef _CtxRenderD = int Function(int, ffi.Pointer<ffi.Float>, int, int);
 
 // Node factory
 typedef _CreateNodeN = ffi.Int32 Function(ffi.Int32);
@@ -59,13 +62,33 @@ typedef _CreateDelayN = ffi.Int32 Function(ffi.Int32, ffi.Float);
 typedef _CreateDelayD = int Function(int, double);
 typedef _CreateSplitterN = ffi.Int32 Function(ffi.Int32, ffi.Int32);
 typedef _CreateSplitterD = int Function(int, int);
+typedef _CreateIIRFilterN = ffi.Int32 Function(ffi.Int32,
+    ffi.Pointer<ffi.Double>, ffi.Int32, ffi.Pointer<ffi.Double>, ffi.Int32);
+typedef _CreateIIRFilterD = int Function(
+    int, ffi.Pointer<ffi.Double>, int, ffi.Pointer<ffi.Double>, int);
 
 // Graph
 typedef _ConnectN = ffi.Void Function(
     ffi.Int32, ffi.Int32, ffi.Int32, ffi.Int32, ffi.Int32);
 typedef _ConnectD = void Function(int, int, int, int, int);
+typedef _ConnectParamN = ffi.Void Function(
+    ffi.Int32, ffi.Int32, ffi.Int32, ffi.Pointer<ffi.Char>, ffi.Int32);
+typedef _ConnectParamD = void Function(
+    int, int, int, ffi.Pointer<ffi.Char>, int);
 typedef _DisconnectN = ffi.Void Function(ffi.Int32, ffi.Int32, ffi.Int32);
 typedef _DisconnectD = void Function(int, int, int);
+typedef _DisconnectOutputN = ffi.Void Function(ffi.Int32, ffi.Int32, ffi.Int32);
+typedef _DisconnectOutputD = void Function(int, int, int);
+typedef _DisconnectNodeOutputN = ffi.Void Function(
+    ffi.Int32, ffi.Int32, ffi.Int32, ffi.Int32);
+typedef _DisconnectNodeOutputD = void Function(int, int, int, int);
+typedef _DisconnectNodeInputN = ffi.Void Function(
+    ffi.Int32, ffi.Int32, ffi.Int32, ffi.Int32, ffi.Int32);
+typedef _DisconnectNodeInputD = void Function(int, int, int, int, int);
+typedef _DisconnectParamN = ffi.Void Function(
+    ffi.Int32, ffi.Int32, ffi.Int32, ffi.Pointer<ffi.Char>, ffi.Int32);
+typedef _DisconnectParamD = void Function(
+    int, int, int, ffi.Pointer<ffi.Char>, int);
 typedef _DisconnectAllN = ffi.Void Function(ffi.Int32, ffi.Int32);
 typedef _DisconnectAllD = void Function(int, int);
 
@@ -87,19 +110,30 @@ typedef _ParamSetTargetN = ffi.Void Function(
     ffi.Int32, ffi.Pointer<ffi.Char>, ffi.Float, ffi.Double, ffi.Float);
 typedef _ParamSetTargetD = void Function(
     int, ffi.Pointer<ffi.Char>, double, double, double);
+typedef _ParamSetValueCurveN = ffi.Void Function(
+    ffi.Int32,
+    ffi.Pointer<ffi.Char>,
+    ffi.Pointer<ffi.Float>,
+    ffi.Int32,
+    ffi.Double,
+    ffi.Double);
+typedef _ParamSetValueCurveD = void Function(
+    int, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Float>, int, double, double);
 typedef _ParamCancelN = ffi.Void Function(
     ffi.Int32, ffi.Pointer<ffi.Char>, ffi.Double);
 typedef _ParamCancelD = void Function(int, ffi.Pointer<ffi.Char>, double);
+typedef _ParamGetN = ffi.Float Function(ffi.Int32, ffi.Pointer<ffi.Char>);
+typedef _ParamGetD = double Function(int, ffi.Pointer<ffi.Char>);
 
 // Osc
 typedef _OscSetTypeN = ffi.Void Function(ffi.Int32, ffi.Int32);
 typedef _OscSetTypeD = void Function(int, int);
 typedef _OscStartN = ffi.Void Function(ffi.Int32, ffi.Double);
 typedef _OscStartD = void Function(int, double);
-typedef _OscSetPeriodicWaveN = ffi.Void Function(
-    ffi.Int32, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.Float>, ffi.Int32);
+typedef _OscSetPeriodicWaveN = ffi.Void Function(ffi.Int32,
+    ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.Float>, ffi.Int32, ffi.Int32);
 typedef _OscSetPeriodicWaveD = void Function(
-    int, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.Float>, int);
+    int, ffi.Pointer<ffi.Float>, ffi.Pointer<ffi.Float>, int, int);
 
 // Filter
 typedef _FilterSetTypeN = ffi.Void Function(ffi.Int32, ffi.Int32);
@@ -112,20 +146,46 @@ typedef _BufSrcSetBufD = void Function(
     int, ffi.Pointer<ffi.Float>, int, int, int);
 typedef _BufSrcStartN = ffi.Void Function(ffi.Int32, ffi.Double);
 typedef _BufSrcStartD = void Function(int, double);
+typedef _BufSrcStartAdvancedN = ffi.Void Function(
+    ffi.Int32, ffi.Double, ffi.Double, ffi.Double, ffi.Int32);
+typedef _BufSrcStartAdvancedD = void Function(int, double, double, double, int);
 typedef _BufSrcStopN = ffi.Void Function(ffi.Int32, ffi.Double);
 typedef _BufSrcStopD = void Function(int, double);
 typedef _BufSrcSetLoopN = ffi.Void Function(ffi.Int32, ffi.Int32);
 typedef _BufSrcSetLoopD = void Function(int, int);
+typedef _BufSrcSetLoopPointsN = ffi.Void Function(
+    ffi.Int32, ffi.Double, ffi.Double);
+typedef _BufSrcSetLoopPointsD = void Function(int, double, double);
 
 // Analyser
 typedef _AnalyserSetFftN = ffi.Void Function(ffi.Int32, ffi.Int32);
 typedef _AnalyserSetFftD = void Function(int, int);
+typedef _AnalyserSetDoubleN = ffi.Void Function(ffi.Int32, ffi.Double);
+typedef _AnalyserSetDoubleD = void Function(int, double);
 typedef _AnalyserGetByteN = ffi.Void Function(
     ffi.Int32, ffi.Pointer<ffi.Uint8>, ffi.Int32);
 typedef _AnalyserGetByteD = void Function(int, ffi.Pointer<ffi.Uint8>, int);
 typedef _AnalyserGetFloatN = ffi.Void Function(
     ffi.Int32, ffi.Pointer<ffi.Float>, ffi.Int32);
 typedef _AnalyserGetFloatD = void Function(int, ffi.Pointer<ffi.Float>, int);
+typedef _BiquadGetFrequencyResponseN = ffi.Void Function(
+    ffi.Int32,
+    ffi.Pointer<ffi.Float>,
+    ffi.Pointer<ffi.Float>,
+    ffi.Pointer<ffi.Float>,
+    ffi.Int32);
+typedef _BiquadGetFrequencyResponseD = void Function(
+    int,
+    ffi.Pointer<ffi.Float>,
+    ffi.Pointer<ffi.Float>,
+    ffi.Pointer<ffi.Float>,
+    int);
+typedef _CompressorGetReductionN = ffi.Float Function(ffi.Int32);
+typedef _CompressorGetReductionD = double Function(int);
+typedef _PannerSetIntN = ffi.Void Function(ffi.Int32, ffi.Int32);
+typedef _PannerSetIntD = void Function(int, int);
+typedef _PannerSetDoubleN = ffi.Void Function(ffi.Int32, ffi.Double);
+typedef _PannerSetDoubleD = void Function(int, double);
 
 // WaveShaper
 typedef _WaveShaperSetCurveN = ffi.Void Function(
@@ -133,6 +193,12 @@ typedef _WaveShaperSetCurveN = ffi.Void Function(
 typedef _WaveShaperSetCurveD = void Function(int, ffi.Pointer<ffi.Float>, int);
 typedef _WaveShaperSetOversampleN = ffi.Void Function(ffi.Int32, ffi.Int32);
 typedef _WaveShaperSetOversampleD = void Function(int, int);
+typedef _ConvolverSetBufferN = ffi.Void Function(ffi.Int32,
+    ffi.Pointer<ffi.Float>, ffi.Int32, ffi.Int32, ffi.Int32, ffi.Int32);
+typedef _ConvolverSetBufferD = void Function(
+    int, ffi.Pointer<ffi.Float>, int, int, int, int);
+typedef _ConvolverSetNormalizeN = ffi.Void Function(ffi.Int32, ffi.Int32);
+typedef _ConvolverSetNormalizeD = void Function(int, int);
 
 // MIDI
 typedef _MidiGetPortCountN = ffi.Int32 Function(ffi.Int32);
@@ -176,6 +242,9 @@ typedef _WorkletReleaseBridgeD = void Function(int, int);
 typedef _CreateMachineVoiceN = ffi.Void Function(
     ffi.Int32, ffi.Pointer<ffi.Int32>);
 typedef _CreateMachineVoiceD = void Function(int, ffi.Pointer<ffi.Int32>);
+typedef _SetMachineVoiceActiveN = ffi.Void Function(
+    ffi.Int32, ffi.Int32, ffi.Int32);
+typedef _SetMachineVoiceActiveD = void Function(int, int, int);
 
 // ---------------------------------------------------------------------------
 // Lazy FFI lookups
@@ -214,6 +283,10 @@ final _contextClose =
     _lib.lookupFunction<_CtxVoidN, _CtxVoidD>('wajuce_context_close');
 final _contextGetDestinationId = _lib
     .lookupFunction<_CtxIntN, _CtxIntD>('wajuce_context_get_destination_id');
+final _contextGetListenerId =
+    _lib.lookupFunction<_CtxIntN, _CtxIntD>('wajuce_context_get_listener_id');
+final _contextRender =
+    _lib.lookupFunction<_CtxRenderN, _CtxRenderD>('wajuce_context_render');
 
 // Node factory
 final _createGain =
@@ -232,8 +305,17 @@ final _createAnalyser =
     _lib.lookupFunction<_CreateNodeN, _CreateNodeD>('wajuce_create_analyser');
 final _createStereoPanner = _lib
     .lookupFunction<_CreateNodeN, _CreateNodeD>('wajuce_create_stereo_panner');
+final _createPanner =
+    _lib.lookupFunction<_CreateNodeN, _CreateNodeD>('wajuce_create_panner');
 final _createWaveShaper = _lib
     .lookupFunction<_CreateNodeN, _CreateNodeD>('wajuce_create_wave_shaper');
+final _createConstantSource = _lib.lookupFunction<_CreateNodeN, _CreateNodeD>(
+    'wajuce_create_constant_source');
+final _createConvolver =
+    _lib.lookupFunction<_CreateNodeN, _CreateNodeD>('wajuce_create_convolver');
+final _createIIRFilter =
+    _lib.lookupFunction<_CreateIIRFilterN, _CreateIIRFilterD>(
+        'wajuce_create_iir_filter');
 final _createMediaStreamSource =
     _lib.lookupFunction<_CreateNodeN, _CreateNodeD>(
         'wajuce_create_media_stream_source');
@@ -249,6 +331,9 @@ final _createChannelMerger =
 final _createMachineVoice =
     _lib.lookupFunction<_CreateMachineVoiceN, _CreateMachineVoiceD>(
         'wajuce_create_machine_voice');
+final _setMachineVoiceActive =
+    _lib.lookupFunction<_SetMachineVoiceActiveN, _SetMachineVoiceActiveD>(
+        'wajuce_machine_voice_set_active');
 
 typedef _DecodeAudioDataN = ffi.Int32 Function(
   ffi.Pointer<ffi.Uint8> encodedData,
@@ -272,8 +357,22 @@ final _decodeAudioData =
 
 // Graph
 final _connect = _lib.lookupFunction<_ConnectN, _ConnectD>('wajuce_connect');
+final _connectParam =
+    _lib.lookupFunction<_ConnectParamN, _ConnectParamD>('wajuce_connect_param');
 final _disconnect =
     _lib.lookupFunction<_DisconnectN, _DisconnectD>('wajuce_disconnect');
+final _disconnectOutput =
+    _lib.lookupFunction<_DisconnectOutputN, _DisconnectOutputD>(
+        'wajuce_disconnect_output');
+final _disconnectNodeOutput =
+    _lib.lookupFunction<_DisconnectNodeOutputN, _DisconnectNodeOutputD>(
+        'wajuce_disconnect_node_output');
+final _disconnectNodeInput =
+    _lib.lookupFunction<_DisconnectNodeInputN, _DisconnectNodeInputD>(
+        'wajuce_disconnect_node_input');
+final _disconnectParam =
+    _lib.lookupFunction<_DisconnectParamN, _DisconnectParamD>(
+        'wajuce_disconnect_param');
 final _disconnectAll = _lib
     .lookupFunction<_DisconnectAllN, _DisconnectAllD>('wajuce_disconnect_all');
 final _removeNode = _lib
@@ -290,10 +389,15 @@ final _paramExpRamp =
     _lib.lookupFunction<_ParamRampN, _ParamRampD>('wajuce_param_exp_ramp');
 final _paramSetTarget = _lib.lookupFunction<_ParamSetTargetN, _ParamSetTargetD>(
     'wajuce_param_set_target');
+final _paramSetValueCurve =
+    _lib.lookupFunction<_ParamSetValueCurveN, _ParamSetValueCurveD>(
+        'wajuce_param_set_value_curve');
 final _paramCancel =
     _lib.lookupFunction<_ParamCancelN, _ParamCancelD>('wajuce_param_cancel');
 final _paramCancelAndHold = _lib.lookupFunction<_ParamCancelN, _ParamCancelD>(
     'wajuce_param_cancel_and_hold');
+final _paramGet =
+    _lib.lookupFunction<_ParamGetN, _ParamGetD>('wajuce_param_get');
 
 // Osc
 final _oscSetType =
@@ -314,14 +418,29 @@ final _bufSrcSetBuffer = _lib.lookupFunction<_BufSrcSetBufN, _BufSrcSetBufD>(
     'wajuce_buffer_source_set_buffer');
 final _bufSrcStart = _lib
     .lookupFunction<_BufSrcStartN, _BufSrcStartD>('wajuce_buffer_source_start');
+final _bufSrcStartAdvanced =
+    _lib.lookupFunction<_BufSrcStartAdvancedN, _BufSrcStartAdvancedD>(
+        'wajuce_buffer_source_start_with_offset');
 final _bufSrcStop = _lib
     .lookupFunction<_BufSrcStopN, _BufSrcStopD>('wajuce_buffer_source_stop');
 final _bufSrcSetLoop = _lib.lookupFunction<_BufSrcSetLoopN, _BufSrcSetLoopD>(
     'wajuce_buffer_source_set_loop');
+final _bufSrcSetLoopPoints =
+    _lib.lookupFunction<_BufSrcSetLoopPointsN, _BufSrcSetLoopPointsD>(
+        'wajuce_buffer_source_set_loop_points');
 
 // Analyser
 final _analyserSetFft = _lib.lookupFunction<_AnalyserSetFftN, _AnalyserSetFftD>(
     'wajuce_analyser_set_fft_size');
+final _analyserSetMinDecibels =
+    _lib.lookupFunction<_AnalyserSetDoubleN, _AnalyserSetDoubleD>(
+        'wajuce_analyser_set_min_decibels');
+final _analyserSetMaxDecibels =
+    _lib.lookupFunction<_AnalyserSetDoubleN, _AnalyserSetDoubleD>(
+        'wajuce_analyser_set_max_decibels');
+final _analyserSetSmoothing =
+    _lib.lookupFunction<_AnalyserSetDoubleN, _AnalyserSetDoubleD>(
+        'wajuce_analyser_set_smoothing_time_constant');
 final _analyserGetByteFreq =
     _lib.lookupFunction<_AnalyserGetByteN, _AnalyserGetByteD>(
         'wajuce_analyser_get_byte_freq');
@@ -334,6 +453,39 @@ final _analyserGetFloatFreq =
 final _analyserGetFloatTime =
     _lib.lookupFunction<_AnalyserGetFloatN, _AnalyserGetFloatD>(
         'wajuce_analyser_get_float_time');
+final _biquadGetFrequencyResponse = _lib.lookupFunction<
+    _BiquadGetFrequencyResponseN,
+    _BiquadGetFrequencyResponseD>('wajuce_biquad_get_frequency_response');
+final _iirGetFrequencyResponse = _lib.lookupFunction<
+    _BiquadGetFrequencyResponseN,
+    _BiquadGetFrequencyResponseD>('wajuce_iir_get_frequency_response');
+final _compressorGetReduction =
+    _lib.lookupFunction<_CompressorGetReductionN, _CompressorGetReductionD>(
+        'wajuce_compressor_get_reduction');
+final _pannerSetPanningModel =
+    _lib.lookupFunction<_PannerSetIntN, _PannerSetIntD>(
+        'wajuce_panner_set_panning_model');
+final _pannerSetDistanceModel =
+    _lib.lookupFunction<_PannerSetIntN, _PannerSetIntD>(
+        'wajuce_panner_set_distance_model');
+final _pannerSetRefDistance =
+    _lib.lookupFunction<_PannerSetDoubleN, _PannerSetDoubleD>(
+        'wajuce_panner_set_ref_distance');
+final _pannerSetMaxDistance =
+    _lib.lookupFunction<_PannerSetDoubleN, _PannerSetDoubleD>(
+        'wajuce_panner_set_max_distance');
+final _pannerSetRolloffFactor =
+    _lib.lookupFunction<_PannerSetDoubleN, _PannerSetDoubleD>(
+        'wajuce_panner_set_rolloff_factor');
+final _pannerSetConeInnerAngle =
+    _lib.lookupFunction<_PannerSetDoubleN, _PannerSetDoubleD>(
+        'wajuce_panner_set_cone_inner_angle');
+final _pannerSetConeOuterAngle =
+    _lib.lookupFunction<_PannerSetDoubleN, _PannerSetDoubleD>(
+        'wajuce_panner_set_cone_outer_angle');
+final _pannerSetConeOuterGain =
+    _lib.lookupFunction<_PannerSetDoubleN, _PannerSetDoubleD>(
+        'wajuce_panner_set_cone_outer_gain');
 
 // WaveShaper
 final _waveShaperSetCurve =
@@ -342,6 +494,12 @@ final _waveShaperSetCurve =
 final _waveShaperSetOversample =
     _lib.lookupFunction<_WaveShaperSetOversampleN, _WaveShaperSetOversampleD>(
         'wajuce_wave_shaper_set_oversample');
+final _convolverSetBuffer =
+    _lib.lookupFunction<_ConvolverSetBufferN, _ConvolverSetBufferD>(
+        'wajuce_convolver_set_buffer');
+final _convolverSetNormalize =
+    _lib.lookupFunction<_ConvolverSetNormalizeN, _ConvolverSetNormalizeD>(
+        'wajuce_convolver_set_normalize');
 
 // MIDI
 final _midiGetPortCount =
@@ -416,11 +574,14 @@ void _freeCString(ffi.Pointer<ffi.Char> ptr) {
   calloc.free(ptr);
 }
 
-final Set<int> _emulatedPannerNodes = <int>{};
-final Set<int> _emulatedConstantSourceNodes = <int>{};
-final Set<int> _emulatedConvolverNodes = <int>{};
 final Map<int, Float64List> _iirFeedforward = <int, Float64List>{};
 final Map<int, Float64List> _iirFeedback = <int, Float64List>{};
+final Map<int, double> _bufferSourceLoopStarts = <int, double>{};
+final Map<int, double> _bufferSourceLoopEnds = <int, double>{};
+final Map<int, bool> _convolverNormalize = <int, bool>{};
+final Map<int, int> _contextBufferSizes = <int, int>{};
+final Map<int, double> _contextSampleRates = <int, double>{};
+final Map<int, int> _contextOutputChannels = <int, int>{};
 
 // ---------------------------------------------------------------------------
 // Backend API — Context
@@ -431,11 +592,22 @@ int contextCreate(int sampleRate, int bufferSize,
   // print('[wajuce] Dart: contextCreate sr=$sampleRate, bs=$bufferSize, inCh=$inputChannels, outCh=$outputChannels');
   final id =
       _contextCreate(sampleRate, bufferSize, inputChannels, outputChannels);
+  if (id >= 0) {
+    _contextBufferSizes[id] = bufferSize;
+    _contextSampleRates[id] = sampleRate.toDouble();
+    _contextOutputChannels[id] = outputChannels;
+  }
   // print('[wajuce] Dart: contextCreated, native id=$id');
   return id;
 }
 
-void contextDestroy(int ctxId) => _contextDestroy(ctxId);
+void contextDestroy(int ctxId) {
+  _contextBufferSizes.remove(ctxId);
+  _contextSampleRates.remove(ctxId);
+  _contextOutputChannels.remove(ctxId);
+  _contextDestroy(ctxId);
+}
+
 double contextGetTime(int ctxId) => _contextGetTime(ctxId);
 int contextGetLiveNodeCount(int ctxId) => _contextGetLiveNodeCount(ctxId);
 int contextGetFeedbackBridgeCount(int ctxId) =>
@@ -444,8 +616,14 @@ int contextGetMachineVoiceGroupCount(int ctxId) =>
     _contextGetMachineVoiceGroupCount(ctxId);
 double contextGetSampleRate(int ctxId) => _contextGetSampleRate(ctxId);
 int contextGetBitDepth(int ctxId) => _contextGetBitDepth(ctxId);
-bool contextSetPreferredSampleRate(int ctxId, double sampleRate) =>
-    _contextSetPreferredSampleRate(ctxId, sampleRate) != 0;
+bool contextSetPreferredSampleRate(int ctxId, double sampleRate) {
+  final ok = _contextSetPreferredSampleRate(ctxId, sampleRate) != 0;
+  if (ok) {
+    _contextSampleRates[ctxId] = sampleRate;
+  }
+  return ok;
+}
+
 bool contextSetPreferredBitDepth(int ctxId, int bitDepth) =>
     _contextSetPreferredBitDepth(ctxId, bitDepth) != 0;
 int contextGetState(int ctxId) => _contextGetState(ctxId);
@@ -453,15 +631,42 @@ void contextResume(int ctxId) => _contextResume(ctxId);
 void contextSuspend(int ctxId) => _contextSuspend(ctxId);
 void contextClose(int ctxId) => _contextClose(ctxId);
 int contextGetDestinationId(int ctxId) => _contextGetDestinationId(ctxId);
-int contextGetListenerId(int ctxId) => -1;
-double contextGetBaseLatency(int ctxId) => 0.0;
-double contextGetOutputLatency(int ctxId) => 0.0;
+int contextGetListenerId(int ctxId) => _contextGetListenerId(ctxId);
+List<Float32List> contextRender(int ctxId, int frames, int channels) {
+  if (frames <= 0 || channels <= 0) {
+    return List<Float32List>.generate(
+        math.max(channels, 0), (_) => Float32List(0));
+  }
+  final ptr = calloc<ffi.Float>(frames * channels);
+  try {
+    _contextRender(ctxId, ptr, frames, channels);
+    final raw = ptr.asTypedList(frames * channels);
+    return List<Float32List>.generate(channels, (ch) {
+      final start = ch * frames;
+      return Float32List.fromList(raw.sublist(start, start + frames));
+    });
+  } finally {
+    calloc.free(ptr);
+  }
+}
+
+double contextGetBaseLatency(int ctxId) {
+  final bufferSize = _contextBufferSizes[ctxId];
+  final sampleRate = _contextSampleRates[ctxId] ?? contextGetSampleRate(ctxId);
+  if (bufferSize == null || bufferSize <= 0 || sampleRate <= 0) {
+    return 0.0;
+  }
+  return bufferSize / sampleRate;
+}
+
+double contextGetOutputLatency(int ctxId) => contextGetBaseLatency(ctxId);
 Object contextGetSinkId(int ctxId) => 'default';
 Map<String, double> contextGetOutputTimestamp(int ctxId) => {
       'contextTime': contextGetTime(ctxId),
       'performanceTime': 0.0,
     };
-int destinationGetMaxChannelCount(int ctxId) => 2;
+int destinationGetMaxChannelCount(int ctxId) =>
+    _contextOutputChannels[ctxId] ?? 2;
 
 int createChannelSplitter(int id, int outputs) =>
     _createChannelSplitter(id, outputs);
@@ -481,31 +686,30 @@ int createAnalyser(int ctxId) => _createAnalyser(ctxId);
 int createStereoPanner(int ctxId) => _createStereoPanner(ctxId);
 int createWaveShaper(int ctxId) => _createWaveShaper(ctxId);
 int createPanner(int ctxId) {
-  final id = _createStereoPanner(ctxId);
-  _emulatedPannerNodes.add(id);
-  return id;
+  return _createPanner(ctxId);
 }
 
-int createConstantSource(int ctxId) {
-  final id = _createOscillator(ctxId);
-  _emulatedConstantSourceNodes.add(id);
-  _oscSetType(id, 1); // square
-  final freq = _toCString('frequency');
-  _paramSet(id, freq, 0.0);
-  _freeCString(freq);
-  return id;
-}
+int createConstantSource(int ctxId) => _createConstantSource(ctxId);
 
-int createConvolver(int ctxId) {
-  final id = _createGain(ctxId); // pass-through fallback
-  _emulatedConvolverNodes.add(id);
-  return id;
-}
+int createConvolver(int ctxId) => _createConvolver(ctxId);
 
 int createIIRFilter(int ctxId, Float64List feedforward, Float64List feedback) {
-  final id = _createBiquadFilter(ctxId);
-  _iirFeedforward[id] = Float64List.fromList(feedforward);
-  _iirFeedback[id] = Float64List.fromList(feedback);
+  final ff = calloc<ffi.Double>(feedforward.length);
+  final fb = calloc<ffi.Double>(feedback.length);
+  for (int i = 0; i < feedforward.length; i++) {
+    ff[i] = feedforward[i];
+  }
+  for (int i = 0; i < feedback.length; i++) {
+    fb[i] = feedback[i];
+  }
+  final id =
+      _createIIRFilter(ctxId, ff, feedforward.length, fb, feedback.length);
+  calloc.free(ff);
+  calloc.free(fb);
+  if (id >= 0) {
+    _iirFeedforward[id] = Float64List.fromList(feedforward);
+    _iirFeedback[id] = Float64List.fromList(feedback);
+  }
   return id;
 }
 
@@ -532,6 +736,10 @@ List<int> createMachineVoice(int ctxId) {
   return result;
 }
 
+void setMachineVoiceActive(int ctxId, int nodeId, bool active) {
+  _setMachineVoiceActive(ctxId, nodeId, active ? 1 : 0);
+}
+
 // ---------------------------------------------------------------------------
 // Backend API — Graph
 // ---------------------------------------------------------------------------
@@ -540,8 +748,35 @@ void connect(int ctxId, int srcId, int dstId, int output, int input) {
   _connect(ctxId, srcId, dstId, output, input);
 }
 
+void connectParam(
+    int ctxId, int srcId, int dstId, String paramName, int output) {
+  final namePtr = paramName.toNativeUtf8().cast<ffi.Char>();
+  _connectParam(ctxId, srcId, dstId, namePtr, output);
+  calloc.free(namePtr);
+}
+
 void disconnect(int ctxId, int srcId, int dstId) {
   _disconnect(ctxId, srcId, dstId);
+}
+
+void disconnectOutput(int ctxId, int srcId, int output) {
+  _disconnectOutput(ctxId, srcId, output);
+}
+
+void disconnectNodeOutput(int ctxId, int srcId, int dstId, int output) {
+  _disconnectNodeOutput(ctxId, srcId, dstId, output);
+}
+
+void disconnectNodeInput(
+    int ctxId, int srcId, int dstId, int output, int input) {
+  _disconnectNodeInput(ctxId, srcId, dstId, output, input);
+}
+
+void disconnectParam(
+    int ctxId, int srcId, int dstId, String paramName, int output) {
+  final namePtr = paramName.toNativeUtf8().cast<ffi.Char>();
+  _disconnectParam(ctxId, srcId, dstId, namePtr, output);
+  calloc.free(namePtr);
 }
 
 void disconnectAll(int ctxId, int srcId) {
@@ -549,11 +784,11 @@ void disconnectAll(int ctxId, int srcId) {
 }
 
 void removeNode(int ctxId, int nodeId) {
-  _emulatedPannerNodes.remove(nodeId);
-  _emulatedConstantSourceNodes.remove(nodeId);
-  _emulatedConvolverNodes.remove(nodeId);
   _iirFeedforward.remove(nodeId);
   _iirFeedback.remove(nodeId);
+  _bufferSourceLoopStarts.remove(nodeId);
+  _bufferSourceLoopEnds.remove(nodeId);
+  _convolverNormalize.remove(nodeId);
   _removeNode(ctxId, nodeId);
 }
 
@@ -563,20 +798,6 @@ void removeNode(int ctxId, int nodeId) {
 
 void paramSet(int nodeId, String paramName, double value) {
   if (nodeId < 0) {
-    return;
-  }
-  if (_emulatedPannerNodes.contains(nodeId)) {
-    if (paramName == 'positionX') {
-      final pan = value.clamp(-1.0, 1.0);
-      final p = _toCString('pan');
-      _paramSet(nodeId, p, pan);
-      _freeCString(p);
-      return;
-    }
-  }
-  if (_emulatedConstantSourceNodes.contains(nodeId) && paramName == 'offset') {
-    // ConstantSource fallback maps offset to oscillator detune-free frequency
-    // path is unavailable in native fallback, so this remains a no-op.
     return;
   }
   final p = _toCString(paramName);
@@ -648,10 +869,23 @@ void paramSetValueCurve(int nodeId, String paramName, Float32List values,
   if (values.isEmpty || duration <= 0) {
     return;
   }
-  final step = duration / values.length;
-  for (int i = 0; i < values.length; i++) {
-    paramSetAtTime(nodeId, paramName, values[i], startTime + (step * i));
+  final p = _toCString(paramName);
+  final nativeValues = calloc<ffi.Float>(values.length);
+  nativeValues.asTypedList(values.length).setAll(0, values);
+  _paramSetValueCurve(
+      nodeId, p, nativeValues, values.length, startTime, duration);
+  calloc.free(nativeValues);
+  _freeCString(p);
+}
+
+double paramGet(int nodeId, String paramName) {
+  if (nodeId < 0) {
+    return 0.0;
   }
+  final p = _toCString(paramName);
+  final value = _paramGet(nodeId, p);
+  _freeCString(p);
+  return value;
 }
 
 // ---------------------------------------------------------------------------
@@ -663,8 +897,8 @@ void oscStart(int nodeId, double when) => _oscStart(nodeId, when);
 void oscStop(int nodeId, double when) => _oscStop(nodeId, when);
 
 // PeriodicWave support
-void oscSetPeriodicWave(
-    int nodeId, Float32List real, Float32List imag, int len) {
+void oscSetPeriodicWave(int nodeId, Float32List real, Float32List imag, int len,
+    bool disableNormalization) {
   using((arena) {
     final pReal = arena<ffi.Float>(len);
     final pImag = arena<ffi.Float>(len);
@@ -672,7 +906,8 @@ void oscSetPeriodicWave(
       pReal[i] = real[i];
       pImag[i] = imag[i];
     }
-    _oscSetPeriodicWave(nodeId, pReal, pImag, len);
+    _oscSetPeriodicWave(
+        nodeId, pReal, pImag, len, disableNormalization ? 1 : 0);
   });
 }
 
@@ -709,8 +944,8 @@ void bufferSourceStart(int nodeId, [double when = 0]) {
 
 void bufferSourceStartAdvanced(int nodeId, double when,
     [double offset = 0, double? duration]) {
-  // Native backend currently supports "when" scheduling only.
-  _bufSrcStart(nodeId, when);
+  _bufSrcStartAdvanced(
+      nodeId, when, offset, duration ?? 0.0, duration == null ? 0 : 1);
 }
 
 void bufferSourceStop(int nodeId, [double when = 0]) {
@@ -722,11 +957,15 @@ void bufferSourceSetLoop(int nodeId, bool loop) {
 }
 
 void bufferSourceSetLoopStart(int nodeId, double loopStart) {
-  // Native backend loop start is currently fixed at 0 in processor.
+  final previousEnd = _bufferSourceLoopEnds[nodeId] ?? 0.0;
+  _bufferSourceLoopStarts[nodeId] = loopStart;
+  _bufSrcSetLoopPoints(nodeId, loopStart, previousEnd);
 }
 
 void bufferSourceSetLoopEnd(int nodeId, double loopEnd) {
-  // Native backend loop end currently uses full buffer length.
+  final previousStart = _bufferSourceLoopStarts[nodeId] ?? 0.0;
+  _bufferSourceLoopEnds[nodeId] = loopEnd;
+  _bufSrcSetLoopPoints(nodeId, previousStart, loopEnd);
 }
 
 // ---------------------------------------------------------------------------
@@ -738,15 +977,15 @@ void analyserSetFftSize(int nodeId, int size) {
 }
 
 void analyserSetMinDecibels(int nodeId, double value) {
-  // Native analyser backend keeps internal scaling.
+  _analyserSetMinDecibels(nodeId, value);
 }
 
 void analyserSetMaxDecibels(int nodeId, double value) {
-  // Native analyser backend keeps internal scaling.
+  _analyserSetMaxDecibels(nodeId, value);
 }
 
 void analyserSetSmoothingTimeConstant(int nodeId, double value) {
-  // Native analyser backend keeps internal smoothing.
+  _analyserSetSmoothing(nodeId, value);
 }
 
 Uint8List analyserGetByteFrequencyData(int nodeId, int len) {
@@ -783,17 +1022,23 @@ Float32List analyserGetFloatTimeDomainData(int nodeId, int len) {
 
 void biquadGetFrequencyResponse(int nodeId, Float32List frequencyHz,
     Float32List magResponse, Float32List phaseResponse) {
-  // Native JUCE backend does not currently expose direct biquad response query.
   final count = frequencyHz.length;
+  final freq = calloc<ffi.Float>(count);
+  final mag = calloc<ffi.Float>(count);
+  final phase = calloc<ffi.Float>(count);
   for (int i = 0; i < count; i++) {
-    magResponse[i] = 0.0;
-    phaseResponse[i] = 0.0;
+    freq[i] = frequencyHz[i];
   }
+  _biquadGetFrequencyResponse(nodeId, freq, mag, phase, count);
+  magResponse.setAll(0, mag.asTypedList(count));
+  phaseResponse.setAll(0, phase.asTypedList(count));
+  calloc.free(freq);
+  calloc.free(mag);
+  calloc.free(phase);
 }
 
 double compressorGetReduction(int nodeId) {
-  // Native compressor reduction readback is not exposed in current C-API.
-  return 0.0;
+  return _compressorGetReduction(nodeId);
 }
 
 void constantSourceStart(int nodeId, double when) {
@@ -805,84 +1050,80 @@ void constantSourceStop(int nodeId, double when) {
 }
 
 void convolverSetBuffer(int nodeId, WABuffer? buffer) {
-  // Convolver fallback currently behaves as pass-through.
+  if (buffer == null) {
+    _convolverSetBuffer(nodeId, ffi.nullptr, 0, 0, 0, 1);
+    return;
+  }
+  final channels = buffer.numberOfChannels;
+  final frames = buffer.length;
+  final totalSamples = frames * channels;
+  final nativeData = calloc<ffi.Float>(totalSamples);
+  for (int ch = 0; ch < channels; ch++) {
+    final channelData = buffer.getChannelData(ch);
+    for (int i = 0; i < frames; i++) {
+      nativeData[ch * frames + i] = channelData[i];
+    }
+  }
+  final normalize = _convolverNormalize[nodeId] ?? true;
+  _convolverSetBuffer(nodeId, nativeData, frames, channels,
+      buffer.sampleRate.toInt(), normalize ? 1 : 0);
+  calloc.free(nativeData);
 }
 
 void convolverSetNormalize(int nodeId, bool normalize) {
-  // Convolver fallback currently behaves as pass-through.
+  _convolverNormalize[nodeId] = normalize;
+  _convolverSetNormalize(nodeId, normalize ? 1 : 0);
 }
 
 void iirGetFrequencyResponse(int nodeId, Float32List frequencyHz,
     Float32List magResponse, Float32List phaseResponse) {
-  final ff = _iirFeedforward[nodeId];
-  final fb = _iirFeedback[nodeId];
-  if (ff == null || fb == null) {
-    for (int i = 0; i < frequencyHz.length; i++) {
-      magResponse[i] = 0;
-      phaseResponse[i] = 0;
-    }
-    return;
+  final count = math.min(
+      frequencyHz.length, math.min(magResponse.length, phaseResponse.length));
+  if (count <= 0) return;
+  final freq = calloc<ffi.Float>(count);
+  final mag = calloc<ffi.Float>(count);
+  final phase = calloc<ffi.Float>(count);
+  for (int i = 0; i < count; i++) {
+    freq[i] = frequencyHz[i];
   }
-  const sampleRate = 44100.0;
-  for (int i = 0; i < frequencyHz.length; i++) {
-    final omega = 2.0 * 3.141592653589793 * (frequencyHz[i] / sampleRate);
-    double numRe = 0.0;
-    double numIm = 0.0;
-    for (int k = 0; k < ff.length; k++) {
-      final phase = -omega * k;
-      numRe += ff[k] * math.cos(phase);
-      numIm += ff[k] * math.sin(phase);
-    }
-    double denRe = 1.0;
-    double denIm = 0.0;
-    for (int k = 1; k < fb.length; k++) {
-      final phase = -omega * k;
-      denRe += fb[k] * math.cos(phase);
-      denIm += fb[k] * math.sin(phase);
-    }
-    final denMagSq = (denRe * denRe) + (denIm * denIm);
-    if (denMagSq <= 1e-12) {
-      magResponse[i] = 0.0;
-      phaseResponse[i] = 0.0;
-      continue;
-    }
-    final hRe = (numRe * denRe + numIm * denIm) / denMagSq;
-    final hIm = (numIm * denRe - numRe * denIm) / denMagSq;
-    magResponse[i] = math.sqrt((hRe * hRe) + (hIm * hIm)).toDouble();
-    phaseResponse[i] = math.atan2(hIm, hRe).toDouble();
-  }
+  _iirGetFrequencyResponse(nodeId, freq, mag, phase, count);
+  magResponse.setAll(0, mag.asTypedList(count));
+  phaseResponse.setAll(0, phase.asTypedList(count));
+  calloc.free(freq);
+  calloc.free(mag);
+  calloc.free(phase);
 }
 
 void pannerSetPanningModel(int nodeId, int model) {
-  // Fallback uses StereoPanner behavior.
+  _pannerSetPanningModel(nodeId, model);
 }
 
 void pannerSetDistanceModel(int nodeId, int model) {
-  // Fallback uses StereoPanner behavior.
+  _pannerSetDistanceModel(nodeId, model);
 }
 
 void pannerSetRefDistance(int nodeId, double value) {
-  // Fallback uses StereoPanner behavior.
+  _pannerSetRefDistance(nodeId, value);
 }
 
 void pannerSetMaxDistance(int nodeId, double value) {
-  // Fallback uses StereoPanner behavior.
+  _pannerSetMaxDistance(nodeId, value);
 }
 
 void pannerSetRolloffFactor(int nodeId, double value) {
-  // Fallback uses StereoPanner behavior.
+  _pannerSetRolloffFactor(nodeId, value);
 }
 
 void pannerSetConeInnerAngle(int nodeId, double value) {
-  // Fallback uses StereoPanner behavior.
+  _pannerSetConeInnerAngle(nodeId, value);
 }
 
 void pannerSetConeOuterAngle(int nodeId, double value) {
-  // Fallback uses StereoPanner behavior.
+  _pannerSetConeOuterAngle(nodeId, value);
 }
 
 void pannerSetConeOuterGain(int nodeId, double value) {
-  // Fallback uses StereoPanner behavior.
+  _pannerSetConeOuterGain(nodeId, value);
 }
 
 dynamic mediaStreamSourceGetStream(int nodeId) => null;
@@ -1051,7 +1292,7 @@ class MidiDeviceInfoBackend {
 }
 
 Future<bool> midiRequestAccess({bool sysex = false}) async {
-  // On native JUCE, MIDI is always available
+  // On native platforms, MIDI access is available when the runtime driver exists.
   return true;
 }
 

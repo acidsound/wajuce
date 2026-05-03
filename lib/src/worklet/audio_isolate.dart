@@ -105,6 +105,8 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
   final Map<String, WAWorkletProcessor Function()> processors = {};
   final Map<int, WAWorkletProcessor> activeNodes = {};
   final Map<int, native.BridgedNodeInfo> bridgedNodes = {};
+  final Map<int, Map<String, double>> nodeParamDefaults = {};
+  final Map<int, Map<String, Float32List>> nodeParameterBlocks = {};
   final quantumMicros = config.sampleRate > 0
       ? ((native.quantumSize * 1000000) / config.sampleRate).round()
       : 3000;
@@ -146,7 +148,13 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
           }
         }
 
-        final keepAlive = info.processor.process(info.inputs, info.outputs, {});
+        native.refreshParameterBlocks(
+          info.nodeId,
+          info.paramDefaults,
+          info.parameters,
+        );
+        final keepAlive =
+            info.processor.process(info.inputs, info.outputs, info.parameters);
         var bridgeFault = false;
 
         for (int ch = 0; ch < info.fromIsolate.channelCount; ch++) {
@@ -180,6 +188,8 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
     for (final nodeId in deadNodeIds) {
       activeNodes.remove(nodeId)?.dispose();
       bridgedNodes.remove(nodeId);
+      nodeParamDefaults.remove(nodeId);
+      nodeParameterBlocks.remove(nodeId);
     }
 
     if (bridgedNodes.isEmpty) return;
@@ -192,6 +202,8 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
     } else if (message is CreateNodeMessage) {
       activeNodes.remove(message.nodeId)?.dispose();
       bridgedNodes.remove(message.nodeId);
+      nodeParamDefaults.remove(message.nodeId);
+      nodeParameterBlocks.remove(message.nodeId);
 
       final factory = processors[message.processorName];
       if (factory != null) {
@@ -201,12 +213,17 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
           config.mainSendPort.send(PortMessage(message.nodeId, data));
         });
         activeNodes[message.nodeId] = proc;
+        final defaults = native.workletParamDefaults(message.paramDefaults);
+        nodeParamDefaults[message.nodeId] = defaults;
+        nodeParameterBlocks[message.nodeId] =
+            native.createParameterBlocks(defaults);
 
         if (message.bridgeId != null) {
           final bridgeInfo = native.setupBridgedNode(
             message.contextId,
             message.bridgeId!,
             proc,
+            message.paramDefaults,
           );
           if (bridgeInfo != null) {
             final startLoop = bridgedNodes.isEmpty;
@@ -218,6 +235,8 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
     } else if (message is RemoveNodeMessage) {
       activeNodes.remove(message.nodeId)?.dispose();
       bridgedNodes.remove(message.nodeId);
+      nodeParamDefaults.remove(message.nodeId);
+      nodeParameterBlocks.remove(message.nodeId);
       config.mainSendPort.send(NodeRemovedMessage(message.nodeId));
     } else if (message is ProcessorMessage) {
       final proc = activeNodes[message.nodeId];
@@ -229,12 +248,17 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
       if (proc != null && !bridgedNodes.containsKey(message.nodeId)) {
         final inputs = [message.inputData];
         final outputs = [List.generate(2, (_) => Float32List(quantumSize))];
-        final keepAlive = proc.process(inputs, outputs, {});
+        final defaults = nodeParamDefaults[message.nodeId] ?? const {};
+        final parameters = nodeParameterBlocks[message.nodeId] ?? const {};
+        native.refreshParameterBlocks(message.nodeId, defaults, parameters);
+        final keepAlive = proc.process(inputs, outputs, parameters);
         config.mainSendPort
             .send(ProcessedQuantumMessage(message.nodeId, outputs[0]));
         if (!keepAlive) {
           proc.dispose();
           activeNodes.remove(message.nodeId);
+          nodeParamDefaults.remove(message.nodeId);
+          nodeParameterBlocks.remove(message.nodeId);
           config.mainSendPort.send(NodeEndedMessage(message.nodeId));
         }
       }
@@ -244,6 +268,8 @@ void _audioIsolateEntry(AudioIsolateConfig config) {
       }
       activeNodes.clear();
       bridgedNodes.clear();
+      nodeParamDefaults.clear();
+      nodeParameterBlocks.clear();
       receivePort.close();
     }
   });

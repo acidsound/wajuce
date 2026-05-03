@@ -975,6 +975,7 @@ class SequencerScreen extends StatefulWidget {
 }
 
 class MachineVoice {
+  final WAContext ctx;
   final WAOscillatorNode osc;
   final WABiquadFilterNode filter;
   final WAGainNode gain;
@@ -982,8 +983,10 @@ class MachineVoice {
   final WAGainNode delayFb;
   final WAGainNode delayWet;
   final WAStereoPannerNode panner;
+  bool _active = false;
 
   MachineVoice({
+    required this.ctx,
     required this.osc,
     required this.filter,
     required this.gain,
@@ -993,7 +996,14 @@ class MachineVoice {
     required this.panner,
   });
 
+  void setActive(bool active) {
+    if (_active == active) return;
+    _active = active;
+    ctx.setMachineVoiceActive(osc, active);
+  }
+
   void dispose() {
+    setActive(false);
     osc.dispose();
   }
 }
@@ -1004,8 +1014,21 @@ class MachineVoicePool {
   final List<MachineVoice> _spares = [];
   bool _isReplenishing = false;
   bool _disposed = false;
+  bool _deferReplenish = false;
+  int _lastTarget = 0;
 
   MachineVoicePool(this.ctx, this.output);
+
+  bool get hasSpare => _spares.isNotEmpty;
+  int get spareCount => _spares.length;
+
+  void setRealtimeCritical(bool value) {
+    if (_deferReplenish == value) return;
+    _deferReplenish = value;
+    if (!value && !_disposed && _spares.length < _lastTarget) {
+      _ensureReplenish(target: _lastTarget);
+    }
+  }
 
   void prepare(int count) {
     _ensureReplenish(target: count);
@@ -1029,6 +1052,10 @@ class MachineVoicePool {
 
     // 2. Pool empty? Create one immediately.
     // Keep API async-compatible for call sites.
+    if (_deferReplenish) {
+      throw StateError(
+          'Machine voice pool exhausted while transport is running');
+    }
     final v = _createBatch();
 
     _ensureReplenish(); // Schedule replenishment
@@ -1039,6 +1066,7 @@ class MachineVoicePool {
     try {
       final nodes = ctx.createMachineVoice();
       final voice = MachineVoice(
+        ctx: ctx,
         osc: nodes[0] as WAOscillatorNode,
         filter: nodes[1] as WABiquadFilterNode,
         gain: nodes[2] as WAGainNode,
@@ -1055,11 +1083,14 @@ class MachineVoicePool {
       final osc = ctx.createOscillator();
       final filter = ctx.createBiquadFilter();
       final gain = ctx.createGain();
+      filter.frequency.value = 2000;
+      filter.Q.value = 1;
       gain.gain.value = 0; // Start silent
       final panner = ctx.createStereoPanner();
       final delay = ctx.createDelay();
       final delayFb = ctx.createGain();
       final delayWet = ctx.createGain();
+      delay.delayTime.value = 0.3;
       delayFb.gain.value = 0; // Delay feedback starts disabled
       delayWet.gain.value = 0; // Delay wet mix starts disabled
 
@@ -1079,6 +1110,7 @@ class MachineVoicePool {
       osc.start();
 
       return MachineVoice(
+        ctx: ctx,
         osc: osc,
         filter: filter,
         gain: gain,
@@ -1091,7 +1123,9 @@ class MachineVoicePool {
   }
 
   void _ensureReplenish({int target = 8}) {
+    _lastTarget = max(_lastTarget, target);
     if (_disposed || _isReplenishing) return;
+    if (_deferReplenish) return;
     if (_spares.length >= target) return;
 
     _isReplenishing = true;
@@ -1100,7 +1134,7 @@ class MachineVoicePool {
     Future(() {
       // Use Future instead of microtask for better yielding
       try {
-        if (_disposed) return;
+        if (_disposed || _deferReplenish) return;
 
         final v = _createBatch();
 
@@ -1109,7 +1143,7 @@ class MachineVoicePool {
         debugPrint("Replenish error: $e");
       } finally {
         _isReplenishing = false;
-        if (!_disposed && _spares.length < target) {
+        if (!_disposed && !_deferReplenish && _spares.length < target) {
           // Schedule next batch with a slight delay if needed,
           // and yield a frame to keep UI responsive.
           Future.delayed(const Duration(milliseconds: 16),
@@ -1125,6 +1159,10 @@ class MachineVoicePool {
       final v = _spares.removeLast();
       _ensureReplenish();
       return v;
+    }
+    if (_deferReplenish) {
+      throw StateError(
+          'Machine voice pool exhausted while transport is running');
     }
     final v = _createBatch();
     _ensureReplenish();
@@ -1164,6 +1202,19 @@ class MachineState {
 
   MachineState(this.id, MachineVoice voice) : _voice = voice;
 
+  void markVoiceDefaultsApplied() {
+    _lastWaveType = waveType;
+    _lastFilterType = filterType;
+    _lastFrequency = frequency;
+    _lastCutoff = cutoff;
+    _lastResonance = resonance;
+    _lastPan = pan;
+    _lastDelayTime = delayTime;
+    _lastDelayFeedback = delayFeedback;
+    _lastDelayMix = delayMix;
+    _lastDelayEnabled = delayEnabled;
+  }
+
   void ensureVoice() {
     // No-op, voice is injected
   }
@@ -1174,7 +1225,11 @@ class MachineState {
 }
 
 class _SequencerScreenState extends State<SequencerScreen> {
+  static const int _poolPrewarmVoices = 16;
+  static const int _scheduleLookaheadSteps = 8;
+
   final List<MachineState> _machines = [];
+  final List<MachineState> _retiredDuringPlayback = [];
   bool _isPlaying = false;
   double _bpm = 120;
   double _masterGain = 0.8;
@@ -1191,6 +1246,8 @@ class _SequencerScreenState extends State<SequencerScreen> {
   double? _lastTickScheduledTime;
   int _lastTickStep = -1;
   int _tickCount = 0;
+  int _lastClockTickIndex = -1;
+  int _scheduledUntilTickIndex = -1;
   bool _watchdogReportedTimeout = false;
 
   double get _noteSafetyAheadSeconds =>
@@ -1207,7 +1264,7 @@ class _SequencerScreenState extends State<SequencerScreen> {
 
     _pool = MachineVoicePool(widget.ctx, _masterOutput!);
     // Pre-warm the pool effectively in background
-    _pool!.prepare(2);
+    _pool!.prepare(_poolPrewarmVoices);
 
     // Initial machine
     Future.delayed(const Duration(milliseconds: 100), _addMachine);
@@ -1239,7 +1296,8 @@ class _SequencerScreenState extends State<SequencerScreen> {
           final step = (data['step'] as num?)?.toInt();
           if (step == null) return;
           final scheduledTime = (data['time'] as num?)?.toDouble();
-          _onTick(step, scheduledTime);
+          final tickIndex = (data['tick'] as num?)?.toInt();
+          _onTick(step, scheduledTime, tickIndex);
         } else if (type == 'diag') {
           debugPrint(
               '[wajuce] ClockWorklet diag: ${Map<String, Object?>.from(data)}');
@@ -1257,6 +1315,10 @@ class _SequencerScreenState extends State<SequencerScreen> {
     for (final m in _machines) {
       m.dispose();
     }
+    for (final m in _retiredDuringPlayback) {
+      m.dispose();
+    }
+    _retiredDuringPlayback.clear();
     _masterOutput?.dispose();
     super.dispose();
   }
@@ -1266,7 +1328,13 @@ class _SequencerScreenState extends State<SequencerScreen> {
   void _addMachine() async {
     if (!mounted || _isAddingMachine) return;
 
-    setState(() => _isAddingMachine = true);
+    final hasWarmVoice = _pool?.hasSpare ?? false;
+    if (!hasWarmVoice && _isPlaying) {
+      return;
+    }
+    if (!hasWarmVoice) {
+      setState(() => _isAddingMachine = true);
+    }
 
     try {
       // Use async creation to avoid blocking main thread & audio thread lock contention
@@ -1277,29 +1345,47 @@ class _SequencerScreenState extends State<SequencerScreen> {
         return;
       }
 
-      late final MachineState machine;
+      final machine = MachineState(_machines.length, voice);
+      machine.markVoiceDefaultsApplied();
+      voice.setActive(_isPlaying);
       setState(() {
-        machine = MachineState(_machines.length, voice);
         _machines.add(machine);
         _isAddingMachine = false;
       });
-      _applyMachineRealtimeParams(
-        machine,
-        atTime: widget.ctx.currentTime + _warmupAheadSeconds,
-        force: true,
-      );
+      if (!_isPlaying) {
+        _applyMachineRealtimeParams(
+          machine,
+          atTime: widget.ctx.currentTime + _warmupAheadSeconds,
+        );
+      }
     } catch (e) {
       debugPrint("Error adding machine: $e");
       if (mounted) setState(() => _isAddingMachine = false);
     }
   }
 
+  void _deleteMachineAt(int index) {
+    if (index < 0 || index >= _machines.length) return;
+    final machine = _machines[index];
+    final v = machine._voice;
+    if (_isPlaying && v != null) {
+      v.setActive(false);
+      _retiredDuringPlayback.add(machine);
+    } else {
+      machine.dispose();
+    }
+    setState(() => _machines.removeAt(index));
+  }
+
   void _togglePlay() {
     setState(() {
       _isPlaying = !_isPlaying;
       if (_isPlaying) {
+        _pool?.setRealtimeCritical(true);
         _currentStep = 0;
         _tickCount = 0;
+        _lastClockTickIndex = -1;
+        _scheduledUntilTickIndex = -1;
         _lastTickStep = -1;
         _lastTickWallTime = null;
         _lastTickScheduledTime = null;
@@ -1313,6 +1399,7 @@ class _SequencerScreenState extends State<SequencerScreen> {
             'timelineStart=${timelineStart.toStringAsFixed(3)} '
             'machines=${_machines.length} clockNode=${_clockNode?.nodeId}');
         for (final m in _machines) {
+          m._voice?.setActive(true);
           _applyMachineRealtimeParams(m, atTime: warmupTime, force: true);
         }
         _clockNode?.port.postMessage({
@@ -1320,6 +1407,7 @@ class _SequencerScreenState extends State<SequencerScreen> {
           'contextTime': timelineStart,
         });
         _clockNode?.port.postMessage({'type': 'bpm', 'value': _bpm});
+        _scheduleLookaheadFrom(0, timelineStart);
         _startTickWatchdog();
       } else {
         debugPrint(
@@ -1327,8 +1415,17 @@ class _SequencerScreenState extends State<SequencerScreen> {
             'currentStep=$_currentStep tickCount=$_tickCount');
         _clockNode?.port.postMessage({'type': 'stop'});
         _hardStopAllMachines();
+        for (final m in _machines) {
+          m._voice?.setActive(false);
+        }
         _currentStep = -1; // Reset highlight
         _tickWatchdog?.cancel();
+        for (final m in _retiredDuringPlayback) {
+          m.dispose();
+        }
+        _retiredDuringPlayback.clear();
+        _scheduledUntilTickIndex = -1;
+        _pool?.setRealtimeCritical(false);
       }
     });
   }
@@ -1443,15 +1540,51 @@ class _SequencerScreenState extends State<SequencerScreen> {
     }
   }
 
-  void _onTick(int step, [double? scheduledTime]) {
+  void _scheduleLookaheadFrom(int tickIndex, double scheduledTime) {
+    final targetTick = max(
+      _scheduledUntilTickIndex,
+      tickIndex + _scheduleLookaheadSteps,
+    );
+    final minScheduleTime = widget.ctx.currentTime + _noteSafetyAheadSeconds;
+
+    for (int nextTick = _scheduledUntilTickIndex + 1;
+        nextTick <= targetTick;
+        nextTick++) {
+      final stepTime =
+          scheduledTime + ((nextTick - tickIndex) * _sixteenthSeconds);
+      _scheduledUntilTickIndex = nextTick;
+      if (stepTime < minScheduleTime) {
+        continue;
+      }
+      _scheduleSequencerStep(nextTick, stepTime);
+    }
+  }
+
+  void _scheduleSequencerStep(int tickIndex, double time) {
+    final step = tickIndex % 16;
+    final machines = List<MachineState>.of(_machines);
+    for (final m in machines) {
+      if (m.steps[step]) {
+        _playMachine(m, time);
+      }
+    }
+  }
+
+  void _onTick(int step, [double? scheduledTime, int? tickIndex]) {
     if (!mounted || !_isPlaying) return;
     final wallNow = DateTime.now();
     final now = widget.ctx.currentTime;
+    final resolvedTickIndex = tickIndex ?? (_lastClockTickIndex + 1);
+    _lastClockTickIndex = max(_lastClockTickIndex, resolvedTickIndex);
+
+    if (scheduledTime != null) {
+      _scheduleLookaheadFrom(resolvedTickIndex, scheduledTime);
+    }
+
     if (scheduledTime != null &&
         scheduledTime < now - _staleTickDropThresholdSeconds) {
-      debugPrint('[wajuce] Sequencer dropped stale tick: step=$step '
+      debugPrint('[wajuce] Sequencer late tick: step=$step '
           'scheduled=${scheduledTime.toStringAsFixed(3)} now=${now.toStringAsFixed(3)}');
-      return;
     }
     final expectedStep = _lastTickStep >= 0 ? ((_lastTickStep + 1) % 16) : step;
     final wallGapMs = _lastTickWallTime == null
@@ -1481,10 +1614,6 @@ class _SequencerScreenState extends State<SequencerScreen> {
           'expected=${expectedGapMs.toStringAsFixed(1)}ms '
           'step=$step scheduled=${scheduledTime.toStringAsFixed(3)}');
     }
-    final triggerTime = scheduledTime == null
-        ? (now + _noteSafetyAheadSeconds)
-        : max(scheduledTime, now + _noteSafetyAheadSeconds);
-
     _lastTickWallTime = wallNow;
     _lastTickScheduledTime = scheduledTime;
     _lastTickStep = step;
@@ -1493,13 +1622,7 @@ class _SequencerScreenState extends State<SequencerScreen> {
     if ((_tickCount % 16) == 0) {
       debugPrint(
           '[wajuce] Sequencer tick bar: tickCount=$_tickCount step=$step '
-          'ctx=${now.toStringAsFixed(3)} trigger=${triggerTime.toStringAsFixed(3)}');
-    }
-
-    for (var m in _machines) {
-      if (m.steps[step]) {
-        _playMachine(m, triggerTime);
-      }
+          'ctx=${now.toStringAsFixed(3)} scheduledUntil=$_scheduledUntilTickIndex');
     }
 
     if (_currentStep != step) {
@@ -1629,10 +1752,13 @@ class _SequencerScreenState extends State<SequencerScreen> {
             itemCount: _machines.length + 1,
             itemBuilder: (context, index) {
               if (index == _machines.length) {
+                final poolHasSpare = _pool?.hasSpare ?? false;
+                final addDisabled =
+                    _isAddingMachine || (_isPlaying && !poolHasSpare);
                 return Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: ElevatedButton.icon(
-                    onPressed: _isAddingMachine ? null : _addMachine,
+                    onPressed: addDisabled ? null : _addMachine,
                     icon: _isAddingMachine
                         ? const SizedBox(
                             width: 20,
@@ -1641,7 +1767,9 @@ class _SequencerScreenState extends State<SequencerScreen> {
                         : const Icon(Icons.add),
                     label: Text(_isAddingMachine
                         ? ' BUILDING NODES...'
-                        : 'ADD MACHINE'),
+                        : (_isPlaying && !poolHasSpare
+                            ? 'WARMING NODES...'
+                            : 'ADD MACHINE')),
                   ),
                 );
               }
@@ -1654,8 +1782,7 @@ class _SequencerScreenState extends State<SequencerScreen> {
                   setState(() {});
                 },
                 onDelete: () {
-                  _machines[index].dispose();
-                  setState(() => _machines.removeAt(index));
+                  _deleteMachineAt(index);
                 },
               );
             },

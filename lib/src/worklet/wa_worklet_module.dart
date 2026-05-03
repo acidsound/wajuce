@@ -1,22 +1,57 @@
 import 'wa_worklet_processor.dart';
+import '../enums.dart';
 
 /// Loader callback invoked by [WAWorklet.addModule].
 typedef WAWorkletModuleLoader = void Function(
     WAWorkletModuleRegistrar registrar);
 
+/// Descriptor for an AudioWorklet `AudioParam`.
+class WAWorkletParameterDescriptor {
+  /// Parameter name exposed in `AudioWorkletNode.parameters`.
+  final String name;
+
+  /// Initial value used when the node is created.
+  final double defaultValue;
+
+  /// Minimum nominal value for UI/validation metadata.
+  final double minValue;
+
+  /// Maximum nominal value for UI/validation metadata.
+  final double maxValue;
+
+  /// Automation rate metadata.
+  final WAAutomationRate automationRate;
+
+  /// Creates a worklet parameter descriptor.
+  const WAWorkletParameterDescriptor({
+    required this.name,
+    this.defaultValue = 0.0,
+    this.minValue = -3.4028235e38,
+    this.maxValue = 3.4028235e38,
+    this.automationRate = WAAutomationRate.aRate,
+  });
+}
+
 /// Registrar passed to module loaders.
 ///
 /// A module should call [registerProcessor] for each processor it provides.
 class WAWorkletModuleRegistrar {
-  final void Function(String name, WAWorkletProcessor Function() factory)
-      _register;
+  final void Function(
+    String name,
+    WAWorkletProcessor Function() factory,
+    List<WAWorkletParameterDescriptor> parameterDescriptors,
+  ) _register;
 
   /// Creates a registrar used by the runtime to collect processors.
   WAWorkletModuleRegistrar(this._register);
 
   /// Registers a processor factory exposed by the module.
-  void registerProcessor(String name, WAWorkletProcessor Function() factory) {
-    _register(name, factory);
+  void registerProcessor(
+    String name,
+    WAWorkletProcessor Function() factory, {
+    List<WAWorkletParameterDescriptor> parameterDescriptors = const [],
+  }) {
+    _register(name, factory, parameterDescriptors);
   }
 }
 

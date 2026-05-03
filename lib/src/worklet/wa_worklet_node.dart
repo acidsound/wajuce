@@ -1,6 +1,9 @@
 import '../nodes/audio_node.dart';
 import '../audio_param.dart';
+import '../backend/backend.dart' as backend;
+import '../enums.dart';
 import 'wa_worklet.dart';
+import 'wa_worklet_module.dart';
 import 'audio_param_map.dart';
 
 /// An AudioWorkletNode — connects a custom processor to the audio graph.
@@ -33,6 +36,7 @@ class WAWorkletNode extends WANode {
     required String processorName,
     required WAWorklet worklet,
     Map<String, double> parameterDefaults = const {},
+    Map<String, WAWorkletParameterDescriptor> parameterDescriptors = const {},
   })  : _processorName = processorName,
         _worklet = worklet {
     final effectiveDefaults = <String, double>{
@@ -41,7 +45,7 @@ class WAWorkletNode extends WANode {
     };
 
     // Create the processor in the audio isolate
-    // On native JUCE, the nodeId IS the bridgeId (returned from createWorkletNode)
+    // On native backends, nodeId is the bridgeId returned from createWorkletNode.
     _worklet.createNode(nodeId, processorName,
         paramDefaults: effectiveDefaults, bridgeId: nodeId);
 
@@ -53,11 +57,17 @@ class WAWorkletNode extends WANode {
 
     final params = <String, WAParam>{};
     for (final entry in parameterDefaults.entries) {
+      final descriptor = parameterDescriptors[entry.key];
       params[entry.key] = WAParam(
+        contextId: contextId,
         nodeId: nodeId,
         paramName: entry.key,
         defaultValue: entry.value,
+        minValue: descriptor?.minValue ?? -3.4028235e38,
+        maxValue: descriptor?.maxValue ?? 3.4028235e38,
+        automationRate: descriptor?.automationRate ?? WAAutomationRate.aRate,
       );
+      backend.paramSet(nodeId, entry.key, entry.value);
     }
     parameters = WAAudioParamMap(params);
 

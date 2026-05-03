@@ -31,19 +31,52 @@ class WAAudioListener {
   late final WAParam upZ;
 
   /// Creates an [WAAudioListener] bound to the backend listener node.
-  WAAudioListener({required int nodeId}) {
-    positionX =
-        WAParam(nodeId: nodeId, paramName: 'positionX', defaultValue: 0);
-    positionY =
-        WAParam(nodeId: nodeId, paramName: 'positionY', defaultValue: 0);
-    positionZ =
-        WAParam(nodeId: nodeId, paramName: 'positionZ', defaultValue: 0);
-    forwardX = WAParam(nodeId: nodeId, paramName: 'forwardX', defaultValue: 0);
-    forwardY = WAParam(nodeId: nodeId, paramName: 'forwardY', defaultValue: 0);
-    forwardZ = WAParam(nodeId: nodeId, paramName: 'forwardZ', defaultValue: -1);
-    upX = WAParam(nodeId: nodeId, paramName: 'upX', defaultValue: 0);
-    upY = WAParam(nodeId: nodeId, paramName: 'upY', defaultValue: 1);
-    upZ = WAParam(nodeId: nodeId, paramName: 'upZ', defaultValue: 0);
+  WAAudioListener({required int contextId, required int nodeId}) {
+    positionX = WAParam(
+        contextId: contextId,
+        nodeId: nodeId,
+        paramName: 'positionX',
+        defaultValue: 0);
+    positionY = WAParam(
+        contextId: contextId,
+        nodeId: nodeId,
+        paramName: 'positionY',
+        defaultValue: 0);
+    positionZ = WAParam(
+        contextId: contextId,
+        nodeId: nodeId,
+        paramName: 'positionZ',
+        defaultValue: 0);
+    forwardX = WAParam(
+        contextId: contextId,
+        nodeId: nodeId,
+        paramName: 'forwardX',
+        defaultValue: 0);
+    forwardY = WAParam(
+        contextId: contextId,
+        nodeId: nodeId,
+        paramName: 'forwardY',
+        defaultValue: 0);
+    forwardZ = WAParam(
+        contextId: contextId,
+        nodeId: nodeId,
+        paramName: 'forwardZ',
+        defaultValue: -1);
+    upX = WAParam(
+        contextId: contextId,
+        nodeId: nodeId,
+        paramName: 'upX',
+        defaultValue: 0);
+    upY = WAParam(
+        contextId: contextId,
+        nodeId: nodeId,
+        paramName: 'upY',
+        defaultValue: 1);
+    upZ = WAParam(
+        contextId: contextId,
+        nodeId: nodeId,
+        paramName: 'upZ',
+        defaultValue: 0);
   }
 
   /// Legacy convenience method.

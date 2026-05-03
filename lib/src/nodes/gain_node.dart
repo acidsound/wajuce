@@ -12,6 +12,7 @@ class WAGainNode extends WANode {
     required super.contextId,
   }) {
     gain = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'gain',
       defaultValue: 1.0,

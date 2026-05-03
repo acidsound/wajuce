@@ -116,6 +116,11 @@ void _unregisterNode(int nodeId) {
   _mediaStreamDestinationStreams.remove(nodeId);
 }
 
+JSAudioContext? _contextForNode(int nodeId) {
+  final ctxId = _nodeContextIds[nodeId];
+  return ctxId == null ? null : _contexts[ctxId];
+}
+
 /// Resolve the AudioParam for a given node by paramName
 JSAudioParam? _getParam(int nodeId, String paramName) {
   final node = _nodes[nodeId];
@@ -276,6 +281,9 @@ void contextClose(int ctxId) {
 
 int contextGetDestinationId(int ctxId) => _contextDestinationIds[ctxId] ?? 0;
 int contextGetListenerId(int ctxId) => _contextListenerIds[ctxId] ?? -1;
+List<Float32List> contextRender(int ctxId, int frames, int channels) =>
+    List<Float32List>.generate(channels.clamp(0, 32).toInt(),
+        (_) => Float32List(frames.clamp(0, 0x7fffffff).toInt()));
 double contextGetBaseLatency(int ctxId) {
   final ctx = _contexts[ctxId];
   if (ctx == null) return 0.0;
@@ -685,6 +693,8 @@ List<int> createMachineVoice(int ctxId) {
       'createMachineVoice native optimization not supported on Web');
 }
 
+void setMachineVoiceActive(int ctxId, int nodeId, bool active) {}
+
 // ---------------------------------------------------------------------------
 // JS Interop definitions for Worklet
 // ---------------------------------------------------------------------------
@@ -763,6 +773,14 @@ void connect(int ctxId, int srcId, int dstId, int output, int input) {
   src.callMethod('connect'.toJS, dst, output.toJS, input.toJS);
 }
 
+void connectParam(
+    int ctxId, int srcId, int dstId, String paramName, int output) {
+  final src = _nodes[srcId];
+  final param = _getParam(dstId, paramName);
+  if (src == null || param == null) return;
+  src.callMethod('connect'.toJS, param, output.toJS);
+}
+
 void disconnect(int ctxId, int srcId, int dstId) {
   final src = _nodes[srcId];
   final dst = _nodes[dstId];
@@ -772,6 +790,35 @@ void disconnect(int ctxId, int srcId, int dstId) {
   } else {
     src.callMethod('disconnect'.toJS);
   }
+}
+
+void disconnectOutput(int ctxId, int srcId, int output) {
+  final src = _nodes[srcId];
+  if (src == null) return;
+  src.callMethod('disconnect'.toJS, output.toJS);
+}
+
+void disconnectNodeOutput(int ctxId, int srcId, int dstId, int output) {
+  final src = _nodes[srcId];
+  final dst = _nodes[dstId];
+  if (src == null || dst == null) return;
+  src.callMethod('disconnect'.toJS, dst, output.toJS);
+}
+
+void disconnectNodeInput(
+    int ctxId, int srcId, int dstId, int output, int input) {
+  final src = _nodes[srcId];
+  final dst = _nodes[dstId];
+  if (src == null || dst == null) return;
+  src.callMethod('disconnect'.toJS, dst, output.toJS, input.toJS);
+}
+
+void disconnectParam(
+    int ctxId, int srcId, int dstId, String paramName, int output) {
+  final src = _nodes[srcId];
+  final param = _getParam(dstId, paramName);
+  if (src == null || param == null) return;
+  src.callMethod('disconnect'.toJS, param, output.toJS);
 }
 
 void disconnectAll(int ctxId, int srcId) {
@@ -846,6 +893,11 @@ void paramSetValueCurve(int nodeId, String paramName, Float32List values,
   }
 }
 
+double paramGet(int nodeId, String paramName) {
+  final param = _getParam(nodeId, paramName);
+  return param?.value.toDartDouble ?? 0.0;
+}
+
 // ---------------------------------------------------------------------------
 // Backend API — Oscillator
 // ---------------------------------------------------------------------------
@@ -875,13 +927,15 @@ void constantSourceStop(int nodeId, double when) {
   _nodes[nodeId]?.callMethod('stop'.toJS, when.toJS);
 }
 
-void oscSetPeriodicWave(
-    int nodeId, Float32List real, Float32List imag, int len) {
+void oscSetPeriodicWave(int nodeId, Float32List real, Float32List imag, int len,
+    bool disableNormalization) {
   final node = _nodes[nodeId];
   if (node == null) return;
-  // Use first context as default
-  final ctx = _contexts.values.first;
-  final wave = ctx.createPeriodicWave(real.toJS, imag.toJS);
+  final ctx = _contextForNode(nodeId);
+  if (ctx == null) return;
+  final options = JSObject()
+    ..setProperty('disableNormalization'.toJS, disableNormalization.toJS);
+  final wave = ctx.createPeriodicWave(real.toJS, imag.toJS, options);
   node.callMethod('setPeriodicWave'.toJS, wave);
 }
 
@@ -932,7 +986,8 @@ void convolverSetBuffer(int nodeId, WABuffer? buffer) {
     node.setProperty('buffer'.toJS, null);
     return;
   }
-  final ctx = _contexts.values.first;
+  final ctx = _contextForNode(nodeId);
+  if (ctx == null) return;
   final jsBuf = ctx.createBuffer(
     buffer.numberOfChannels.toJS,
     buffer.length.toJS,
@@ -964,7 +1019,8 @@ void bufferSourceSetBuffer(int nodeId, WABuffer buffer) {
   final node = _nodes[nodeId];
   if (node == null) return;
 
-  final ctx = _contexts.values.first;
+  final ctx = _contextForNode(nodeId);
+  if (ctx == null) return;
   final jsBuf = ctx.createBuffer(
     buffer.numberOfChannels.toJS,
     buffer.length.toJS,

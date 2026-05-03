@@ -1,5 +1,5 @@
 name: wajuce
-description: "A JUCE-powered Web Audio API 1.1 implementation for Flutter. Provides high-performance, low-latency audio processing for iOS, Android, macOS, Windows, and Web."
+description: "An iPlug2-backed Web Audio API 1.1 implementation for Flutter. Provides high-performance, low-latency audio processing for native platforms and Web."
 version: 0.2.4
 homepage: https://github.com/acidsound/wajuce
 repository: https://github.com/acidsound/wajuce
@@ -8,7 +8,7 @@ issue_tracker: https://github.com/acidsound/wajuce/issues
 topics:
   - audio
   - web-audio
-  - juce
+  - iplug2
   - synthesizer
   - dsp
 

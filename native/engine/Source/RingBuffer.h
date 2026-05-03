@@ -1,13 +1,15 @@
 #pragma once
 #include <algorithm>
 #include <atomic>
+#include <memory>
 #include <vector>
 
 namespace wajuce {
 
 /**
  * Single-Producer Single-Consumer (SPSC) Lock-Free Ring Buffer.
- * Optimized for audio data transfer between Dart Isolate and JUCE Engine.
+ * Optimized for audio data transfer between Dart isolates and the native
+ * WebAudio renderer.
  */
 class SPSCRingBuffer {
 public:

@@ -1,4 +1,5 @@
 import '../enums.dart';
+import '../audio_param.dart';
 import '../backend/backend.dart' as backend;
 
 /// Base class for all audio nodes. Mirrors the Web Audio API AudioNode.
@@ -49,8 +50,33 @@ abstract class WANode {
   ///
   /// Optionally specify [output] and [input] channel indices.
   WANode connect(WANode destination, {int output = 0, int input = 0}) {
+    _validateSameContext(destination.contextId);
+    _validateOutput(output);
+    if (input < 0 || input >= destination.numberOfInputs) {
+      throw RangeError.value(
+        input,
+        'input',
+        'Destination has ${destination.numberOfInputs} input(s)',
+      );
+    }
     backend.connect(_contextId, _nodeId, destination.nodeId, output, input);
     return destination;
+  }
+
+  /// Connect this node's output to an [AudioParam]-style destination.
+  ///
+  /// This mirrors Web Audio's `AudioNode.connect(AudioParam)` overload. The
+  /// source output is down-mixed to mono before it modulates the parameter.
+  void connectParam(WAParam destination, {int output = 0}) {
+    _validateSameContext(destination.contextId);
+    _validateOutput(output);
+    backend.connectParam(
+      _contextId,
+      _nodeId,
+      destination.nodeId,
+      destination.paramName,
+      output,
+    );
   }
 
   /// Connect and mark [destination] as owned by this node.
@@ -67,12 +93,75 @@ abstract class WANode {
   /// [destination].
   void disconnect([WANode? destination]) {
     if (destination != null) {
+      _validateSameContext(destination.contextId);
       _ownedDownstream.remove(destination);
       backend.disconnect(_contextId, _nodeId, destination.nodeId);
     } else {
       _ownedDownstream.clear();
       backend.disconnectAll(_contextId, _nodeId);
     }
+  }
+
+  /// Disconnect every outgoing connection from a specific [output].
+  void disconnectOutput(int output) {
+    _validateOutput(output);
+    _ownedDownstream.clear();
+    backend.disconnectOutput(_contextId, _nodeId, output);
+  }
+
+  /// Disconnect this node from [destination] with optional output/input
+  /// filtering.
+  void disconnectFrom(WANode destination, {int? output, int? input}) {
+    _validateSameContext(destination.contextId);
+    _ownedDownstream.remove(destination);
+    if (output == null && input == null) {
+      backend.disconnect(_contextId, _nodeId, destination.nodeId);
+      return;
+    }
+    if (output == null) {
+      throw ArgumentError.value(
+        input,
+        'input',
+        'Cannot specify input without output',
+      );
+    }
+    _validateOutput(output);
+    if (input == null) {
+      backend.disconnectNodeOutput(
+        _contextId,
+        _nodeId,
+        destination.nodeId,
+        output,
+      );
+      return;
+    }
+    if (input < 0 || input >= destination.numberOfInputs) {
+      throw RangeError.value(
+        input,
+        'input',
+        'Destination has ${destination.numberOfInputs} input(s)',
+      );
+    }
+    backend.disconnectNodeInput(
+      _contextId,
+      _nodeId,
+      destination.nodeId,
+      output,
+      input,
+    );
+  }
+
+  /// Disconnect this node's output from an [AudioParam]-style destination.
+  void disconnectParam(WAParam destination, {int output = 0}) {
+    _validateSameContext(destination.contextId);
+    _validateOutput(output);
+    backend.disconnectParam(
+      _contextId,
+      _nodeId,
+      destination.nodeId,
+      destination.paramName,
+      output,
+    );
   }
 
   /// Free this node's native resources.
@@ -97,6 +186,26 @@ abstract class WANode {
         continue;
       }
       node._disposeWithVisited(visited);
+    }
+  }
+
+  void _validateSameContext(int destinationContextId) {
+    if (_contextId != destinationContextId) {
+      throw ArgumentError.value(
+        destinationContextId,
+        'destination',
+        'Destination belongs to a different audio context',
+      );
+    }
+  }
+
+  void _validateOutput(int output) {
+    if (output < 0 || output >= numberOfOutputs) {
+      throw RangeError.value(
+        output,
+        'output',
+        'Node has $numberOfOutputs output(s)',
+      );
     }
   }
 }

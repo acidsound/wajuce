@@ -27,6 +27,7 @@ class WABiquadFilterNode extends WANode {
     required super.contextId,
   }) {
     frequency = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'frequency',
       defaultValue: 350.0,
@@ -34,6 +35,7 @@ class WABiquadFilterNode extends WANode {
       maxValue: 22050.0,
     );
     detune = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'detune',
       defaultValue: 0.0,
@@ -41,6 +43,7 @@ class WABiquadFilterNode extends WANode {
       maxValue: 153600.0,
     );
     Q = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'Q',
       defaultValue: 1.0,
@@ -48,6 +51,7 @@ class WABiquadFilterNode extends WANode {
       maxValue: 3.4028235e38,
     );
     gain = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'gain',
       defaultValue: 0.0,

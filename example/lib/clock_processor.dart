@@ -147,6 +147,7 @@ class ClockProcessor extends WAWorkletProcessor {
             _contextStartTime + (_nextTickFrame / _sampleRate);
         port.postMessage({
           'type': 'tick',
+          'tick': _tickCount,
           'step': _step,
           'time': scheduledTime,
         });

@@ -1,4 +1,5 @@
 import 'audio_buffer.dart';
+import 'backend/backend.dart' as backend;
 import 'context.dart';
 
 /// Offline rendering context for non-real-time audio processing.
@@ -46,12 +47,13 @@ class WAOfflineContext extends WAContext {
 
   /// Start rendering and return the resulting AudioBuffer.
   Future<WABuffer> startRendering() async {
-    // Minimal offline-path implementation: return an allocated output buffer.
-    // A full graph render path can replace this while preserving the API.
+    final renderedChannels =
+        backend.contextRender(contextId, _length, _numberOfChannels);
     return WABuffer(
       numberOfChannels: _numberOfChannels,
       length: _length,
       sampleRate: _offlineSampleRate,
+      channels: renderedChannels,
     );
   }
 }

@@ -12,6 +12,7 @@ class WAStereoPannerNode extends WANode {
     required super.contextId,
   }) {
     pan = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'pan',
       defaultValue: 0.0,

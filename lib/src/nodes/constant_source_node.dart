@@ -14,6 +14,7 @@ class WAConstantSourceNode extends WAScheduledSourceNode {
     required super.contextId,
   }) {
     offset = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'offset',
       defaultValue: 1.0,

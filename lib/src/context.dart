@@ -77,7 +77,10 @@ class WAContext {
       contextId: _ctxId,
       maxChannelCount: backend.destinationGetMaxChannelCount(_ctxId),
     );
-    _listener = WAAudioListener(nodeId: backend.contextGetListenerId(_ctxId));
+    _listener = WAAudioListener(
+      contextId: _ctxId,
+      nodeId: backend.contextGetListenerId(_ctxId),
+    );
     _renderCapacity = WAAudioRenderCapacity(_ctxId);
     _worklet = WAWorklet(contextId: _ctxId, sampleRate: sampleRate);
     _requestedBitDepth = backend.contextGetBitDepth(_ctxId);
@@ -97,7 +100,10 @@ class WAContext {
       contextId: _ctxId,
       maxChannelCount: backend.destinationGetMaxChannelCount(_ctxId),
     );
-    _listener = WAAudioListener(nodeId: backend.contextGetListenerId(_ctxId));
+    _listener = WAAudioListener(
+      contextId: _ctxId,
+      nodeId: backend.contextGetListenerId(_ctxId),
+    );
     _renderCapacity = WAAudioRenderCapacity(_ctxId);
 
     // Initialize Web AudioWorklet if on Web
@@ -472,6 +478,8 @@ class WAContext {
           'Processor "$processorName" is not available on this backend. '
           'Import/define a Dart worklet module and call audioWorklet.addModule(...) first.');
     }
+    final resolvedParameterDefaults =
+        _worklet.resolveParameterDefaults(processorName, parameterDefaults);
     final nodeId = backend.createWorkletNode(_ctxId, processorName, 2, 2,
         useProxyProcessor: hasLocalProcessor);
     return WAWorkletNode(
@@ -479,7 +487,8 @@ class WAContext {
       contextId: _ctxId,
       processorName: processorName,
       worklet: _worklet,
-      parameterDefaults: parameterDefaults,
+      parameterDefaults: resolvedParameterDefaults,
+      parameterDescriptors: _worklet.parameterDescriptorsFor(processorName),
     );
   }
 
@@ -514,6 +523,20 @@ class WAContext {
       WAGainNode(nodeId: ids[5], contextId: _ctxId),
       WAGainNode(nodeId: ids[6], contextId: _ctxId),
     ];
+  }
+
+  /// Enables or disables a batch-created machine voice without mutating graph
+  /// topology. This is used by low-latency examples to prewarm voices without
+  /// rendering inactive spares.
+  void setMachineVoiceActive(WANode rootNode, bool active) {
+    if (rootNode.contextId != _ctxId) {
+      throw ArgumentError.value(
+        rootNode.contextId,
+        'rootNode',
+        'Machine voice node belongs to a different context',
+      );
+    }
+    backend.setMachineVoiceActive(_ctxId, rootNode.nodeId, active);
   }
 
   /// Asynchronously creates a specialized Machine Voice on a worker isolate.

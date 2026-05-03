@@ -39,31 +39,37 @@ class WAPannerNode extends WANode {
     required super.contextId,
   }) {
     positionX = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'positionX',
       defaultValue: 0.0,
     );
     positionY = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'positionY',
       defaultValue: 0.0,
     );
     positionZ = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'positionZ',
       defaultValue: 0.0,
     );
     orientationX = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'orientationX',
       defaultValue: 1.0,
     );
     orientationY = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'orientationY',
       defaultValue: 0.0,
     );
     orientationZ = WAParam(
+      contextId: contextId,
       nodeId: nodeId,
       paramName: 'orientationZ',
       defaultValue: 0.0,

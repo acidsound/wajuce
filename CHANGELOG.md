@@ -1,3 +1,8 @@
+## 0.3.2 - 2026-05-04
+
+* **Release Hygiene**: Prepared a warning-free pub.dev package export by omitting upstream iPlug2 `.gitignore` metadata that conflicts with checked-in SDK placeholder files during pub validation.
+* **Pub Score Verification**: Re-validated the package with `dart analyze`, web builds, publish dry-run, and `pana --no-warning` against the clean release export.
+
 ## 0.3.1 - 2026-05-03
 
 * **Web Analyser Fix**: Fixed Web/WASM analyser readback so `getByteTimeDomainData`, `getByteFrequencyData`, `getFloatTimeDomainData`, and `getFloatFrequencyData` return browser-filled typed-array data instead of stale Dart-side buffers.
